@@ -18,6 +18,7 @@ namespace
 
 
 GameOptionsDialog::GameOptionsDialog(
+	ClickHandler keyBindingsClickHandler,
 	ClickHandler saveClickHandler,
 	ClickHandler loadClickHandler,
 	ClickHandler exitClickHandler,
@@ -25,6 +26,7 @@ GameOptionsDialog::GameOptionsDialog(
 ) :
 	Window{constants::WindowSystemTitle},
 	mContinueClickHandler{continueClickHandler},
+	btnKeyBindings{constants::OptionsKeyBindings, keyBindingsClickHandler},
 	btnSave{"Save Game", saveClickHandler},
 	btnLoad{"Load Game", loadClickHandler},
 	btnHelp{"Help", {this, &GameOptionsDialog::onHelp}},
@@ -33,7 +35,7 @@ GameOptionsDialog::GameOptionsDialog(
 {
 	position({0, 0});
 
-	const auto buttons = std::array{&btnSave, &btnLoad, &btnHelp, &btnExit, &btnContinue};
+	const auto buttons = std::array{&btnKeyBindings, &btnSave, &btnLoad, &btnHelp, &btnExit, &btnContinue};
 	auto position = mRect.position + NAS2D::Vector{buttonMargin.x, buttonSize.y};
 	for (auto button : buttons)
 	{
@@ -64,6 +66,7 @@ void GameOptionsDialog::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier /*mod*/
 
 void GameOptionsDialog::onEnableChange()
 {
+	btnKeyBindings.enabled(enabled());
 	btnSave.enabled(enabled());
 	btnLoad.enabled(enabled());
 	btnHelp.enabled(enabled());

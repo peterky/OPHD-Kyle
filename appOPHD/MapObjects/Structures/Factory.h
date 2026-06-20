@@ -57,6 +57,7 @@ public:
 	const ProductionTypeList& productList() const { return mAvailableProducts; }
 
 	void productionCompleteHandler(ProductionCompleteDelegate newProductionCompleteHandler);
+	void enableProduct(ProductType type);
 
 	NAS2D::Dictionary getDataDict() const override;
 

@@ -218,7 +218,7 @@ const std::vector<std::string> TechnologyCatalog::categoryNames()
 }
 
 
-const Technology& TechnologyCatalog::technologyFromId(int id) const
+const Technology* TechnologyCatalog::findTechnologyFromId(int id) const
 {
 	for (const auto& category : mCategories)
 	{
@@ -227,11 +227,23 @@ const Technology& TechnologyCatalog::technologyFromId(int id) const
 
 		if (it != techList.end())
 		{
-			return (*it);
+			return &(*it);
 		}
 	}
 
-	throw std::runtime_error("TechnologyReader: Requested technology id '" + std::to_string(id) + "' not found.");
+	return nullptr;
+}
+
+
+const Technology& TechnologyCatalog::technologyFromId(int id) const
+{
+	const auto* technology = findTechnologyFromId(id);
+	if (!technology)
+	{
+		throw std::runtime_error("TechnologyReader: Requested technology id '" + std::to_string(id) + "' not found.");
+	}
+
+	return *technology;
 }
 
 

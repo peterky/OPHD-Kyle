@@ -11,6 +11,7 @@ class Robot;
 class Robodigger;
 class Robodozer;
 class Robominer;
+class Roboexplorer;
 class Tile;
 class StructureManager;
 
@@ -31,6 +32,7 @@ public:
 	using DiggerList = std::list<Robodigger>;
 	using DozerList = std::list<Robodozer>;
 	using MinerList = std::list<Robominer>;
+	using ExplorerList = std::list<Roboexplorer>;
 
 public:
 	RobotPool(const StructureManager& structureManager);
@@ -48,10 +50,12 @@ public:
 	DiggerList& diggers();
 	DozerList& dozers();
 	MinerList& miners();
+	ExplorerList& explorers();
 
 	const DiggerList& diggers() const;
 	const DozerList& dozers() const;
 	const MinerList& miners() const;
+	const ExplorerList& explorers() const;
 
 	void removeDeployedRobots();
 	void clear();
@@ -61,6 +65,7 @@ public:
 	void deployDigger(Tile& tile, Direction direction);
 	void deployDozer(Tile& tile);
 	void deployMiner(Tile& tile);
+	void deployExplorer(Tile& tile);
 
 	std::size_t robotControlMax() const { return mRobotControlMax; }
 	std::size_t currentControlCount() const { return mRobotControlCount; }
@@ -74,6 +79,7 @@ protected:
 	Robodigger& getDigger();
 	Robodozer& getDozer();
 	Robominer& getMiner();
+	Roboexplorer& getExplorer();
 
 private:
 	const StructureManager& mStructureManager;
@@ -81,6 +87,7 @@ private:
 	DiggerList mDiggers;
 	DozerList mDozers;
 	MinerList mMiners;
+	ExplorerList mExplorers;
 
 	RobotList mRobots; // List of all robots by pointer to base class
 	RobotList mDeployedRobots;

@@ -214,6 +214,7 @@
     <ClCompile Include="MapObjects\Robots\Robodigger.cpp" />
     <ClCompile Include="MapObjects\Robots\Robodozer.cpp" />
     <ClCompile Include="MapObjects\Robots\Robominer.cpp" />
+    <ClCompile Include="MapObjects\Robots\Roboexplorer.cpp" />
     <ClCompile Include="MapObjects\Structure.cpp" />
     <ClCompile Include="MapObjects\StructureIdToClass.cpp" />
     <ClCompile Include="MapObjects\Structures\Agridome.cpp" />
@@ -267,7 +268,9 @@
     <ClCompile Include="UI\FactoryListBox.cpp" />
     <ClCompile Include="UI\FactoryProduction.cpp" />
     <ClCompile Include="UI\FileIo.cpp" />
+    <ClCompile Include="GameSettings.cpp" />
     <ClCompile Include="UI\GameOptionsDialog.cpp" />
+    <ClCompile Include="UI\KeyBindingsDialog.cpp" />
     <ClCompile Include="UI\GameOverDialog.cpp" />
     <ClCompile Include="UI\IconGrid.cpp" />
     <ClCompile Include="UI\MajorEventAnnouncement.cpp" />
@@ -285,6 +288,7 @@
     <ClCompile Include="UI\Reports\FactoryReport.cpp" />
     <ClCompile Include="UI\Reports\MineReport.cpp" />
     <ClCompile Include="UI\Reports\ResearchReport.cpp" />
+    <ClCompile Include="UI\Reports\ResearchTechTree.cpp" />
     <ClCompile Include="UI\Reports\SatellitesReport.cpp" />
     <ClCompile Include="UI\Reports\SpaceportsReport.cpp" />
     <ClCompile Include="UI\Reports\WarehouseReport.cpp" />
@@ -320,6 +324,7 @@
     <ClInclude Include="MapObjects\Robots\Robodigger.h" />
     <ClInclude Include="MapObjects\Robots\Robodozer.h" />
     <ClInclude Include="MapObjects\Robots\Robominer.h" />
+    <ClInclude Include="MapObjects\Robots\Roboexplorer.h" />
     <ClInclude Include="MapObjects\MapObject.h" />
     <ClInclude Include="MapObjects\Robot.h" />
     <ClInclude Include="MapObjects\Robots.h" />
@@ -385,7 +390,9 @@
     <ClInclude Include="UI\FactoryListBox.h" />
     <ClInclude Include="UI\FactoryProduction.h" />
     <ClInclude Include="UI\FileIo.h" />
+    <ClInclude Include="GameSettings.h" />
     <ClInclude Include="UI\GameOptionsDialog.h" />
+    <ClInclude Include="UI\KeyBindingsDialog.h" />
     <ClInclude Include="UI\GameOverDialog.h" />
     <ClInclude Include="UI\IconGrid.h" />
     <ClInclude Include="UI\MajorEventAnnouncement.h" />
@@ -404,6 +411,7 @@
     <ClInclude Include="UI\Reports\MineReport.h" />
     <ClInclude Include="UI\Reports\Report.h" />
     <ClInclude Include="UI\Reports\ResearchReport.h" />
+    <ClInclude Include="UI\Reports\ResearchTechTree.h" />
     <ClInclude Include="UI\Reports\SatellitesReport.h" />
     <ClInclude Include="UI\Reports\SpaceportsReport.h" />
     <ClInclude Include="UI\Reports\WarehouseReport.h" />

@@ -101,6 +101,7 @@ namespace constants
 	const std::string WindowFileIoDelete = "Delete";
 
 	const std::string WindowSystemTitle = "Options";
+	const std::string OptionsKeyBindings = "Key Bindings";
 
 	// =====================================
 	// = UI STRINGS
@@ -110,6 +111,8 @@ namespace constants
 	const std::string WarehouseVacancy = "Vacancy";
 
 	const std::string ResearchReportTopicDetails = "Research Topic Details";
+	const std::string ResearchReportStartResearch = "Start Research";
+	const std::string ResearchReportQueueResearch = "Queue Research";
 
 	// =====================================
 	// = POPULATION PANEL STRINGS

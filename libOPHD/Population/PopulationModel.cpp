@@ -52,19 +52,20 @@ void PopulationModel::removePopulation(const PopulationTable& population)
 }
 
 
-void PopulationModel::spawnPopulation(int morale, int residences, int nurseries, int universities)
+void PopulationModel::spawnPopulation(int morale, int residences, int nurseries, int universities, float fertilityBonus, float educationEfficiency)
 {
 	const int growthChild = (residences > 0 || nurseries > 0) ?
 		mPopulation.scientist / 4 + mPopulation.worker / 2 : 0;
 
 	// Account for universities
-	const int convertRate = (universities > 0) ? studentToScientistRate : 0;
+	const auto effectiveStudentToScientistRate = static_cast<int>(studentToScientistRate * (1.0f + std::min(educationEfficiency, 1.0f)) + 0.5f);
+	const int convertRate = (universities > 0) ? effectiveStudentToScientistRate : 0;
 	const int growthWorker = mPopulation.student * (100 - convertRate) / 100;
 	const int growthScientist = mPopulation.student * convertRate / 100;
 
 	int totalAdults = mPopulation.worker + mPopulation.scientist;
 
-	int divisorChild = moraleModifierTable[moraleIndex(morale)].fertilityRate;
+	int divisorChild = std::max(1, static_cast<int>(moraleModifierTable[moraleIndex(morale)].fertilityRate * (1.0f - std::min(fertilityBonus, 0.95f))));
 	int divisorStudent = ((std::max(mPopulation.adults(), studentToAdultBase) / 40) * 3 + 16) * 4;
 	int divisorAdult = ((std::max(mPopulation.adults(), studentToAdultBase) / 40) * 3 + 45) * 4;
 	int divisorRetiree = ((std::max(totalAdults, adultToRetireeBase) / 40) * 3 + 40) * 4;
@@ -128,13 +129,14 @@ void PopulationModel::killRoles(const PopulationTable& divisor)
 }
 
 
-void PopulationModel::killPopulation(int morale, int nurseries, int hospitals)
+void PopulationModel::killPopulation(int morale, int nurseries, int hospitals, float mortalityReduction)
 {
 	const auto mortalityRate = moraleModifierTable[moraleIndex(morale)].mortalityRate;
+	const auto mortalityMultiplier = 1.0f + std::min(mortalityReduction, 2.0f);
 
-	int divisorChild = mortalityRate + (nurseries * 10);
-	int divisorStudent = mortalityRate + (hospitals * 65);
-	int divisorAdult = mortalityRate + 250 + (hospitals * 60);
+	int divisorChild = static_cast<int>((mortalityRate + (nurseries * 10)) * mortalityMultiplier);
+	int divisorStudent = static_cast<int>((mortalityRate + (hospitals * 65)) * mortalityMultiplier);
+	int divisorAdult = static_cast<int>((mortalityRate + 250 + (hospitals * 60)) * mortalityMultiplier);
 
 	killRoles({divisorChild, divisorStudent, divisorAdult * 2 - 50, divisorAdult * 2 + 50, divisorAdult});
 
@@ -181,13 +183,13 @@ int PopulationModel::consumeFood(int food)
 /**
  * \return	Actual amount of food consumed.
  */
-int PopulationModel::update(int morale, int food, int residences, int universities, int nurseries, int hospitals)
+int PopulationModel::update(int morale, int food, int residences, int universities, int nurseries, int hospitals, float fertilityBonus, float mortalityReduction, float educationEfficiency)
 {
 	mBirthCount = 0;
 	mDeathCount = 0;
 
-	spawnPopulation(morale, residences, nurseries, universities);
-	killPopulation(morale, nurseries, hospitals);
+	spawnPopulation(morale, residences, nurseries, universities, fertilityBonus, educationEfficiency);
+	killPopulation(morale, nurseries, hospitals, mortalityReduction);
 
 	return consumeFood(food);
 }

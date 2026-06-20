@@ -3,6 +3,7 @@
 #include "StructureManager.h"
 #include "Map/Tile.h"
 #include "MapObjects/Robots.h"
+#include "MapObjects/Robots/Roboexplorer.h"
 #include "MapObjects/Structures/CommandCenter.h"
 
 #include <libOPHD/MapObjects/StructureType.h>
@@ -98,10 +99,12 @@ RobotPool::~RobotPool()
 RobotPool::DiggerList& RobotPool::diggers() { return mDiggers; }
 RobotPool::DozerList& RobotPool::dozers() { return mDozers; }
 RobotPool::MinerList& RobotPool::miners() { return mMiners; }
+RobotPool::ExplorerList& RobotPool::explorers() { return mExplorers; }
 
 const RobotPool::DiggerList& RobotPool::diggers() const { return mDiggers; }
 const RobotPool::DozerList& RobotPool::dozers() const { return mDozers; }
 const RobotPool::MinerList& RobotPool::miners() const { return mMiners; }
+const RobotPool::ExplorerList& RobotPool::explorers() const { return mExplorers; }
 
 
 void RobotPool::removeDeployedRobots()
@@ -118,6 +121,7 @@ void RobotPool::clear()
 	mDiggers.clear();
 	mDozers.clear();
 	mMiners.clear();
+	mExplorers.clear();
 
 	mRobots.clear();
 	mDeployedRobots.clear();
@@ -134,6 +138,7 @@ void RobotPool::erase(Robot* robot)
 	eraseRobot(mDiggers, robot);
 	eraseRobot(mDozers, robot);
 	eraseRobot(mMiners, robot);
+	eraseRobot(mExplorers, robot);
 }
 
 
@@ -157,6 +162,10 @@ Robot& RobotPool::addRobot(RobotTypeIndex robotTypeIndex)
 	case RobotTypeIndex::Miner:
 		mMiners.emplace_back();
 		mRobots.push_back(&mMiners.back());
+		break;
+	case RobotTypeIndex::Explorer:
+		mExplorers.emplace_back();
+		mRobots.push_back(&mExplorers.back());
 		break;
 	default:
 		throw std::runtime_error("Unknown RobotTypeIndex: " + std::to_string(static_cast<int>(robotTypeIndex)));
@@ -187,6 +196,10 @@ bool RobotPool::robotAvailable(RobotTypeIndex robotTypeIndex) const
 	{
 		return hasIdleRobot(mMiners);
 	}
+	case RobotTypeIndex::Explorer:
+	{
+		return hasIdleRobot(mExplorers);
+	}
 	default:
 	{
 		return false;
@@ -208,6 +221,9 @@ std::size_t RobotPool::getAvailableCount(RobotTypeIndex robotTypeIndex) const
 	case RobotTypeIndex::Miner:
 		return getIdleCount(mMiners);
 
+	case RobotTypeIndex::Explorer:
+		return getIdleCount(mExplorers);
+
 	default:
 		return 0;
 	}
@@ -225,7 +241,7 @@ void RobotPool::update()
 	}
 
 	mRobotControlMax = static_cast<std::size_t>(totalRobotCommandCapacity);
-	mRobotControlCount = robotControlCount(mDiggers) + robotControlCount(mDozers) + robotControlCount(mMiners);
+	mRobotControlCount = robotControlCount(mDiggers) + robotControlCount(mDozers) + robotControlCount(mMiners) + robotControlCount(mExplorers);
 }
 
 
@@ -272,6 +288,13 @@ void RobotPool::deployMiner(Tile& tile)
 }
 
 
+void RobotPool::deployExplorer(Tile& tile)
+{
+	auto& robot = getExplorer();
+	deploy(robot, tile);
+}
+
+
 NAS2D::Xml::XmlElement* RobotPool::writeRobots()
 {
 	auto* robots = new NAS2D::Xml::XmlElement("robots");
@@ -309,4 +332,10 @@ Robodozer& RobotPool::getDozer()
 Robominer& RobotPool::getMiner()
 {
 	return getIdleRobot(mMiners);
+}
+
+
+Roboexplorer& RobotPool::getExplorer()
+{
+	return getIdleRobot(mExplorers);
 }

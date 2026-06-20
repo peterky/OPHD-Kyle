@@ -4,6 +4,7 @@
 
 #include <libOPHD/EnumIdleReason.h>
 #include <libOPHD/ProductionCost.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <NAS2D/Dictionary.h>
 
@@ -98,6 +99,16 @@ void Factory::productType(ProductType type)
 	productionResetTurns();
 
 	mTurnsToComplete = productCost(mProduct).turnsToBuild;
+	if (const auto* researchEffects = Structure::activeResearchEffects())
+	{
+		mTurnsToComplete = researchEffects->adjustedFactoryTurns(mTurnsToComplete);
+	}
+}
+
+
+void Factory::enableProduct(ProductType type)
+{
+	addProduct(type);
 }
 
 

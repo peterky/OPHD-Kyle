@@ -24,10 +24,12 @@ public:
 	const std::vector<std::string> categoryNames();
 
 	const Technology& technologyFromId(int id) const;
+	const Technology* findTechnologyFromId(int id) const;
 
 	const std::vector<Technology>& technologiesInCategory(const std::string& categoryName) const;
 
 	const std::vector<Category>& categories() { return mCategories; }
+	const std::vector<Category>& categories() const { return mCategories; }
 
 private:
 	std::vector<Category> mCategories;

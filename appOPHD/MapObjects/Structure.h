@@ -21,6 +21,7 @@ enum class StructureClass;
 enum class StructureState;
 struct StructureType;
 struct MapCoordinate;
+struct ColonyResearchEffects;
 class Tile;
 class TileMap;
 class StringTable;
@@ -29,6 +30,9 @@ class StringTable;
 class Structure : public MapObject
 {
 public:
+	static void setActiveResearchEffects(const ColonyResearchEffects* researchEffects);
+	static const ColonyResearchEffects* activeResearchEffects();
+
 	Structure(StructureID id, Tile& tile);
 	Structure(StructureID id, Tile& tile, const std::string& initialAction);
 
@@ -151,7 +155,7 @@ public:
 
 	void rebuild();
 
-	virtual void processTurn();
+	virtual void processTurn(const ColonyResearchEffects& researchEffects);
 	virtual void think() {}
 
 	virtual NAS2D::Dictionary getDataDict() const;
@@ -165,7 +169,7 @@ private:
 	Structure() = delete;
 
 	void incrementAge();
-	void updateIntegrityDecay();
+	void updateIntegrityDecay(const ColonyResearchEffects& researchEffects);
 
 protected:
 	const StructureType& mStructureType;
@@ -189,4 +193,6 @@ protected:
 
 	bool mConnected{false};
 	bool mForcedIdle{false}; /**< Indicates that the Structure was manually set to Idle by the user and should remain that way until the user says otherwise. */
+
+	static const ColonyResearchEffects* s_activeResearchEffects;
 };

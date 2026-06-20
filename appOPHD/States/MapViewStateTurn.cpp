@@ -15,9 +15,14 @@
 #include "../MapObjects/StructureState.h"
 #include "../MapObjects/Structures/CommandCenter.h"
 #include "../MapObjects/Structures/Factory.h"
+#include <libOPHD/EnumProductType.h>
+#include <libOPHD/Technology/Technology.h>
+#include <libOPHD/EnumProductType.h>
+#include <libOPHD/Technology/Technology.h>
 #include "../MapObjects/Structures/MineFacility.h"
 #include "../MapObjects/Structures/MaintenanceFacility.h"
 #include "../MapObjects/Structures/Recycling.h"
+#include "../MapObjects/Structures/ResearchFacility.h"
 #include "../MapObjects/Structures/Residence.h"
 #include "../MapObjects/Structures/Road.h"
 #include "../MapObjects/Structures/Warehouse.h"
@@ -34,6 +39,10 @@
 #include <libOPHD/StorableResources.h>
 #include <libOPHD/MapObjects/StructureType.h>
 #include <libOPHD/Population/MoraleChangeEntry.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+#include <libOPHD/Technology/TechnologyCatalog.h>
+#include <libOPHD/Technology/TechnologyCatalog.h>
 
 #include <NAS2D/Utility.h>
 #include <NAS2D/Renderer/Renderer.h>
@@ -41,15 +50,70 @@
 #include <vector>
 #include <algorithm>
 #include <cfloat>
+#include <set>
+#include <sstream>
+#include <set>
+#include <sstream>
 
 
 namespace
 {
 	const std::map<std::string, StructureID> StructureIdFromString =
 	{
+		{"Agridome", StructureID::Agridome},
+		{"Chap", StructureID::Chap},
+		{"CommTower", StructureID::CommTower},
+		{"CommTower2", StructureID::CommTower},
+		{"CommTower3", StructureID::CommTower},
+		{"Commercial", StructureID::Commercial},
 		{"FusionReactor", StructureID::FusionReactor},
-		{"SolarPlant", StructureID::SolarPlant}
+		{"HotLaboratory", StructureID::HotLaboratory},
+		{"Laboratory", StructureID::Laboratory},
+		{"MaintenanceFacility", StructureID::MaintenanceFacility},
+		{"MedicalCenter", StructureID::MedicalCenter},
+		{"Nursery", StructureID::Nursery},
+		{"Park", StructureID::Park},
+		{"RecreationCenter", StructureID::RecreationCenter},
+		{"Recycling", StructureID::Recycling},
+		{"RedLightDistrict", StructureID::RedLightDistrict},
+		{"Residence", StructureID::Residence},
+		{"RobotCommand", StructureID::RobotCommand},
+		{"RobotCommand2", StructureID::RobotCommand},
+		{"Smelter", StructureID::Smelter},
+		{"Smelter2", StructureID::Smelter},
+		{"SolarPanel1", StructureID::SolarPanel1},
+		{"SolarPanel2", StructureID::SolarPanel1},
+		{"SolarPlant", StructureID::SolarPlant},
+		{"StorageTanks", StructureID::StorageTanks},
+		{"SurfaceFactory", StructureID::SurfaceFactory},
+		{"SurfacePolice", StructureID::SurfacePolice},
+		{"UndergroundFactory", StructureID::UndergroundFactory},
+		{"UndergroundPolice", StructureID::UndergroundPolice},
+		{"University", StructureID::University},
+		{"Warehouse", StructureID::Warehouse},
 	};
+
+
+	const std::set<StructureID> UndergroundStructures =
+	{
+		StructureID::Commercial,
+		StructureID::Laboratory,
+		StructureID::MedicalCenter,
+		StructureID::Nursery,
+		StructureID::Park,
+		StructureID::RecreationCenter,
+		StructureID::RedLightDistrict,
+		StructureID::Residence,
+		StructureID::UndergroundFactory,
+		StructureID::UndergroundPolice,
+		StructureID::University,
+	};
+
+
+	std::string labTypeName(int labType)
+	{
+		return (labType == 0) ? "Underground Lab" : "Hot Lab";
+	}
 
 	// Length of "honeymoon period" of no crime/morale updates after landing, in turns
 	const std::map<Difficulty, int> GracePeriod
@@ -107,7 +171,17 @@ void MapViewState::updatePopulation()
 	const auto& commandCenters = mStructureManager.getStructures<CommandCenter>();
 	foodProducers.insert(foodProducers.end(), commandCenters.begin(), commandCenters.end());
 
-	int amountToConsume = mPopulationModel.update(mMorale.currentMorale(), mFood, residences, universities, nurseries, hospitals);
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	int amountToConsume = mPopulationModel.update(
+		mMorale.currentMorale(),
+		mFood,
+		residences,
+		universities,
+		nurseries,
+		hospitals,
+		researchEffects.populationFertilityBonus,
+		researchEffects.populationMortalityReduction,
+		researchEffects.educationEfficiency);
 	consumeFood(foodProducers, amountToConsume);
 }
 
@@ -197,6 +271,13 @@ void MapViewState::updateMorale()
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::Parks), parkCount});
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::Recreation), recreationCount});
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::Commercial), commercialCount});
+
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	const int researchMoraleBonus = researchEffects.moraleBonusPerTurn();
+	if (researchMoraleBonus > 0)
+	{
+		mMorale.journalMoraleChange({"Research - Social Programs", researchMoraleBonus});
+	}
 
 	// negative
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::Deaths), -deathCount});
@@ -353,7 +434,8 @@ void MapViewState::updateResidentialCapacity()
 
 void MapViewState::updateBiowasteRecycling()
 {
-	int bioWasteProcessingCapacity = mStructureManager.totalBioWasteProcessingCapacity();
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	int bioWasteProcessingCapacity = researchEffects.adjustedBioWasteProcessing(mStructureManager.totalBioWasteProcessingCapacity());
 	if (bioWasteProcessingCapacity <= 0) { return; }
 
 	// Process overflow first, prioritizing structures with minimal overflow
@@ -511,15 +593,134 @@ void MapViewState::updateOverlays()
 }
 
 
+void MapViewState::updateResearchStatusDisplay()
+{
+	std::ostringstream status;
+
+	for (const auto& [techId, researchProgress] : mResearchTracker.currentResearch())
+	{
+		const auto* technology = mTechnologyReader.findTechnologyFromId(techId);
+		if (!technology) { continue; }
+
+		if (!status.str().empty()) { status << "  |  "; }
+		status << "Researching: " << technology->name << " (" << labTypeName(technology->labType) << ", "
+			<< researchProgress.progress << "/" << technology->cost << ")";
+	}
+
+	for (const auto& [labType, queue] : mResearchTracker.researchQueue())
+	{
+		if (queue.empty()) { continue; }
+
+		const auto* nextQueued = mTechnologyReader.findTechnologyFromId(queue.front());
+		if (!nextQueued) { continue; }
+
+		if (!status.str().empty()) { status << "  |  "; }
+		status << "Queued (" << labTypeName(labType) << "): " << nextQueued->name;
+		if (queue.size() > 1)
+		{
+			status << " (+" << (queue.size() - 1) << " more)";
+		}
+	}
+
+	mResearchStatusText = status.str();
+}
+
+
 void MapViewState::updateResearch()
 {
-	// Update research points
+	int regularResearchPoints = 0;
+	int hotResearchPoints = 0;
+
+	for (auto* lab : mStructureManager.getStructures<ResearchFacility>())
+	{
+		if (!lab->operational()) { continue; }
+
+		regularResearchPoints += lab->regularResearchProduced();
+		hotResearchPoints += lab->hotResearchProduced();
+	}
+
+	const auto inProgressResearch = mResearchTracker.currentResearch();
+	std::vector<int> completedThisTurn;
+
+	for (const auto& [techId, researchProgress] : inProgressResearch)
+	{
+		const auto& technology = mTechnologyReader.technologyFromId(techId);
+		const int basePointsThisTurn = (technology.labType == 0) ? regularResearchPoints : hotResearchPoints;
+		const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+		const int pointsThisTurn = researchEffects.adjustedResearchPoints(basePointsThisTurn);
+
+		if (pointsThisTurn <= 0) { continue; }
+
+		const int updatedProgress = researchProgress.progress + pointsThisTurn;
+
+		if (updatedProgress >= technology.cost)
+		{
+			mResearchTracker.completeResearch(techId);
+			completedThisTurn.push_back(techId);
+			mNotificationArea.push({
+				"Research Complete",
+				technology.name + " has been researched.",
+				{{-1, -1}, 0},
+				NotificationArea::NotificationType::Success
+			});
+
+			for (const auto& unlock : technology.unlocks)
+			{
+				if (unlock.unlocks != Technology::Unlock::Unlocks::DisasterPrediction) { continue; }
+
+				mNotificationArea.push({
+					"Early Warning Online",
+					"Colony sensors can now provide advance warning for " + unlock.value + " events.",
+					{{-1, -1}, 0},
+					NotificationArea::NotificationType::Information});
+			}
+
+			for (const auto& unlock : technology.unlocks)
+			{
+				if (unlock.unlocks != Technology::Unlock::Unlocks::DisasterPrediction) { continue; }
+
+				mNotificationArea.push({
+					"Early Warning Online",
+					"Colony sensors can now provide advance warning for " + unlock.value + " events.",
+					{{-1, -1}, 0},
+					NotificationArea::NotificationType::Information});
+			}
+		}
+		else
+		{
+			mResearchTracker.updateResearch(techId, updatedProgress, researchProgress.scientistsAssigned);
+		}
+	}
+
+	for (const auto techId : completedThisTurn)
+	{
+		const auto* completedTechnology = mTechnologyReader.findTechnologyFromId(techId);
+		if (!completedTechnology) { continue; }
+
+		const auto labType = completedTechnology->labType;
+		const auto nextTechId = mResearchTracker.popNextQueued(labType);
+		if (nextTechId >= 0)
+		{
+			const auto* nextTechnology = mTechnologyReader.findTechnologyFromId(nextTechId);
+			if (!nextTechnology) { continue; }
+
+			mResearchTracker.startResearch(nextTechId, 0, 0);
+			mNotificationArea.push({
+				"Research Started",
+				nextTechnology->name + " is now being researched at the " + labTypeName(labType) + ".",
+				{{-1, -1}, 0},
+				NotificationArea::NotificationType::Information
+			});
+		}
+	}
+
 	// get list of completed technologies
 	const auto& completedTechs = mResearchTracker.completedResearch();
 	std::vector<const Technology*> techList;
 	for (const auto techId : completedTechs)
 	{
-		techList.push_back(&mTechnologyReader.technologyFromId(techId));
+		const auto* technology = mTechnologyReader.findTechnologyFromId(techId);
+		if (technology) { techList.push_back(technology); }
 	}
 
 	// get list of completed technologies that unlock buildings
@@ -540,12 +741,36 @@ void MapViewState::updateResearch()
 	{
 		for (const auto& unlock : tech->unlocks)
 		{
-			const auto structureId = StructureIdFromString.at(unlock.value);
-			mStructureTracker.addUnlockedSurfaceStructure(structureId);
+			if (unlock.unlocks != Technology::Unlock::Unlocks::Structure) { continue; }
+
+			const auto structureIt = StructureIdFromString.find(unlock.value);
+			if (structureIt == StructureIdFromString.end()) { continue; }
+
+			const auto structureId = structureIt->second;
+			if (UndergroundStructures.find(structureId) != UndergroundStructures.end())
+			{
+				mStructureTracker.addUnlockedUndergroundStructure(structureId);
+			}
+			else
+			{
+				mStructureTracker.addUnlockedSurfaceStructure(structureId);
+			}
 		}
 	}
 
-	// remove obsolete structures from available structure list
+	if (computeColonyResearchEffects(mResearchTracker, mTechnologyReader).explorerBotUnlocked)
+	{
+		for (auto* factory : mStructureManager.getStructures<Factory>())
+		{
+			const auto& products = factory->productList();
+			if (std::find(products.begin(), products.end(), ProductType::PRODUCT_EXPLORER) == products.end())
+			{
+				factory->enableProduct(ProductType::PRODUCT_EXPLORER);
+			}
+		}
+	}
+
+	updateResearchStatusDisplay();
 }
 
 
@@ -570,7 +795,8 @@ void MapViewState::nextTurn()
 
 	updateConnectedness();
 
-	mStructureManager.update(mResourcesCount, mPopulationPool);
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	mStructureManager.update(mResourcesCount, mPopulationPool, researchEffects);
 
 	checkAgingStructures();
 	checkNewlyBuiltStructures();

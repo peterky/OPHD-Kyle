@@ -1,6 +1,7 @@
 #include "MapObjectPicker.h"
 
 #include "../States/MapViewStateHelper.h"
+#include "../Constants/Strings.h"
 #include "../Constants/UiConstants.h"
 #include "../MapObjects/RobotTypeIndex.h"
 #include "../StructureCatalog.h"
@@ -201,6 +202,41 @@ void MapObjectPicker::clearSelections()
 	mStructures.clearSelection();
 	mConnections.clearSelection();
 	mRobots.clearSelection();
+}
+
+
+bool MapObjectPicker::selectRobot(RobotTypeIndex robotTypeIndex)
+{
+	if (robotTypeIndex == RobotTypeIndex::None) { return false; }
+
+	std::string robotName;
+	switch (robotTypeIndex)
+	{
+	case RobotTypeIndex::Digger:
+		robotName = constants::Robodigger;
+		break;
+	case RobotTypeIndex::Dozer:
+		robotName = constants::Robodozer;
+		break;
+	case RobotTypeIndex::Miner:
+		robotName = constants::Robominer;
+		break;
+	default:
+		return false;
+	}
+
+	if (!mRobots.itemExists(robotName) || !mRobots.itemAvailable(robotName))
+	{
+		return false;
+	}
+
+	mStructures.clearSelection();
+	mConnections.clearSelection();
+	mRobots.setSelectionByMeta(static_cast<int>(robotTypeIndex));
+	mCurrentRobot = robotTypeIndex;
+	mInsertMode = InsertMode::Robot;
+	mSelectionChangedHandler();
+	return true;
 }
 
 

@@ -2,6 +2,8 @@
 
 #include "MapObjects/StructureClass.h"
 
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+
 #include <vector>
 
 
@@ -127,7 +129,7 @@ public:
 	void assignColonistsToResidences(PopulationPool&);
 	void assignScientistsToResearchFacilities(PopulationPool&);
 
-	void update(const StorableResources&, PopulationPool&);
+	void update(const StorableResources&, PopulationPool&, const ColonyResearchEffects&);
 
 	NAS2D::Xml::XmlElement* serialize() const;
 
@@ -146,4 +148,6 @@ private:
 
 	int mTotalEnergyOutput = 0;
 	int mTotalEnergyUsed = 0;
+
+	ColonyResearchEffects mColonyResearchEffects{};
 };

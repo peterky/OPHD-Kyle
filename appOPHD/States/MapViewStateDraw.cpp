@@ -4,6 +4,7 @@
 
 #include "MapViewState.h"
 
+#include "../Constants/Strings.h"
 #include "../Constants/UiConstants.h"
 
 #include <NAS2D/Utility.h>
@@ -39,4 +40,22 @@ void MapViewState::drawSystemButton() const
 	int menuGearHighlightOffsetX = isMouseInMenu ? 144 : 128;
 	const auto menuImageRect = NAS2D::Rectangle<int>{{menuGearHighlightOffsetX, 32}, {constants::ResourceIconSize, constants::ResourceIconSize}};
 	drawIcon(position, menuImageRect);
+}
+
+
+void MapViewState::drawResearchStatus()
+{
+	updateResearchStatusDisplay();
+
+	if (mResearchStatusText.empty()) { return; }
+
+	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
+	const auto& font = Control::getDefaultFont();
+	const auto position = NAS2D::Point{constants::Margin, constants::ResourceIconSize + constants::MarginTight + 2};
+	const auto textSize = font.size(mResearchStatusText);
+	const auto backgroundRect = NAS2D::Rectangle<int>{
+		position - NAS2D::Vector<int>{4, 2},
+		textSize + NAS2D::Vector<int>{8, 4}};
+	renderer.drawBoxFilled(backgroundRect, NAS2D::Color{0, 0, 0, 180});
+	renderer.drawText(font, mResearchStatusText, position, constants::SecondaryColor);
 }

@@ -3,7 +3,9 @@
 #include "Report.h"
 
 #include <libControls/Button.h>
-#include <libControls/ListBox.h>
+#include "ResearchTechTree.h"
+
+#include <libControls/Label.h>
 #include <libControls/TextArea.h>
 
 #include <NAS2D/Math/Point.h>
@@ -22,6 +24,7 @@ namespace NAS2D
 
 class Structure;
 class StructureManager;
+struct Technology;
 class TechnologyCatalog;
 class ResearchTracker;
 
@@ -59,18 +62,30 @@ private:
 	void processCategories();
 	void resetCategorySelection();
 
-	void fillResearchTopicsList();
+	void refreshTechTree();
 
 	void resetResearchDetails();
 	void handleTopicChanged();
+	void onStartResearch();
+	void updateResearchControls();
+
+	bool canStartOrQueueSelectedResearch() const;
+	bool willQueueSelectedResearch() const;
+	std::string activeResearchLine() const;
+	std::string queuedResearchLine() const;
+	void layoutContentAreas();
 
 	void drawCategories(NAS2D::Renderer& renderer) const;
 	void drawCategoryHeader(NAS2D::Renderer& renderer) const;
 	void drawVerticalSectionSpacer(NAS2D::Renderer& renderer, const int column) const;
 	void drawTopicLabRequirements(NAS2D::Renderer& renderer) const;
+	void drawResearchStatusStrip(NAS2D::Renderer& renderer) const;
 	void drawTopicHeaderPanel(NAS2D::Renderer& renderer) const;
 	void drawTopicDetailsPanel(NAS2D::Renderer& renderer) const;
 	void draw(NAS2D::Renderer& renderer) const override;
+
+	std::string buildTopicDetailsText(const Technology& technology) const;
+	std::vector<std::string> readyTechnologiesInCategory() const;
 
 private:
 	struct CategoryPanel
@@ -105,7 +120,9 @@ private:
 	const NAS2D::Image& imageCategoryIcons;
 	const NAS2D::Image& imageTopicIcons;
 
-	ListBox<> lstResearchTopics;
+	ResearchTechTree mTechTree;
+	Button btnStartResearch;
+	Label lblResearchProgress;
 
 	TextArea txtTopicDescription;
 
@@ -117,6 +134,10 @@ private:
 	std::vector<CategoryPanel> mCategoryPanels;
 
 	NAS2D::Point<int> mCategoryHeaderTextPosition{};
+	NAS2D::Point<int> mActiveResearchBannerPosition{};
+	NAS2D::Point<int> mQueuedResearchBannerPosition{};
+	NAS2D::Point<int> mRecommendedTopicsPosition{};
+	int mResearchTreeWidth{0};
 	NAS2D::Point<int> mHotLabIconPosition{};
 	NAS2D::Point<int> mHotLabTextPosition{};
 	NAS2D::Point<int> mStdLabIconPosition{};

@@ -115,11 +115,25 @@ namespace
 			));
 		}
 
+		for (const auto& [labType, queue] : tracker.researchQueue())
+		{
+			for (const auto techId : queue)
+			{
+				research->linkEndChild(NAS2D::dictionaryToAttributes(
+					"queued",
+					NAS2D::Dictionary{{
+						{"tech_id", techId},
+						{"lab_type", labType},
+					}}
+				));
+			}
+		}
+
 		return research;
 	}
 
 
-	ResearchTracker readResearch(NAS2D::Xml::XmlElement* element)
+	ResearchTracker readResearch(NAS2D::Xml::XmlElement* element, const TechnologyCatalog& catalog)
 	{
 		ResearchTracker tracker;
 
@@ -129,19 +143,43 @@ namespace
 
 		for (auto& item : researchList)
 		{
-			tracker.addCompletedResearch(std::stoi(item));
+			if (item.empty()) { continue; }
+
+			const auto techId = std::stoi(item);
+			if (catalog.findTechnologyFromId(techId))
+			{
+				tracker.addCompletedResearch(techId);
+			}
 		}
 
-		for (auto currentResearch = element->firstChildElement();
+		for (auto currentResearch = element->firstChildElement("current");
 			currentResearch != nullptr;
-			currentResearch = currentResearch->nextSiblingElement())
+			currentResearch = currentResearch->nextSiblingElement("current"))
 		{
 			const auto dictionary = NAS2D::attributesToDictionary(*currentResearch);
+			const auto techId = dictionary.get<int>("tech_id");
+
+			if (!catalog.findTechnologyFromId(techId)) { continue; }
 
 			tracker.startResearch(
-				dictionary.get<int>("tech_id"),
+				techId,
 				dictionary.get<int>("progress"),
 				dictionary.get<int>("assigned")
+			);
+		}
+
+		for (auto queuedResearch = element->firstChildElement("queued");
+			queuedResearch != nullptr;
+			queuedResearch = queuedResearch->nextSiblingElement("queued"))
+		{
+			const auto dictionary = NAS2D::attributesToDictionary(*queuedResearch);
+			const auto techId = dictionary.get<int>("tech_id");
+
+			if (!catalog.findTechnologyFromId(techId)) { continue; }
+
+			tracker.tryQueueResearch(
+				techId,
+				dictionary.get<int>("lab_type")
 			);
 		}
 
@@ -267,7 +305,7 @@ void MapViewState::load(SavedGameFile& savedGameFile)
 	readStructures(root->firstChildElement("structures"));
 	updateAllTubeConnectorDir();
 
-	mResearchTracker = readResearch(root->firstChildElement("research"));
+	mResearchTracker = readResearch(root->firstChildElement("research"), mTechnologyReader);
 
 	mResourceBreakdownPanel.previousResources() = readResources(*root, "prev_resources");
 	readPopulation(root->firstChildElement("population"));

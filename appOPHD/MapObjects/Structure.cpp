@@ -14,11 +14,27 @@
 #include <libOPHD/MapObjects/StructureType.h>
 #include <libOPHD/RandomNumberGenerator.h>
 #include <libOPHD/MeanSolarDistance.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <NAS2D/Dictionary.h>
 
 #include <string>
 #include <algorithm>
+
+
+const ColonyResearchEffects* Structure::s_activeResearchEffects{nullptr};
+
+
+void Structure::setActiveResearchEffects(const ColonyResearchEffects* researchEffects)
+{
+	s_activeResearchEffects = researchEffects;
+}
+
+
+const ColonyResearchEffects* Structure::activeResearchEffects()
+{
+	return s_activeResearchEffects;
+}
 
 
 namespace
@@ -361,11 +377,11 @@ void Structure::rebuild()
 }
 
 
-void Structure::processTurn()
+void Structure::processTurn(const ColonyResearchEffects& researchEffects)
 {
 	if (destroyed()) { return; }
 	incrementAge();
-	updateIntegrityDecay();
+	updateIntegrityDecay(researchEffects);
 }
 
 
@@ -384,12 +400,13 @@ void Structure::incrementAge()
 }
 
 
-void Structure::updateIntegrityDecay()
+void Structure::updateIntegrityDecay(const ColonyResearchEffects& researchEffects)
 {
 	// Structures being built don't decay
 	if (state() == StructureState::UnderConstruction) { return; }
 
-	mIntegrity = std::clamp(mIntegrity - integrityDecayRate(), 0, 100);
+	const auto decayAmount = researchEffects.effectiveIntegrityDecay(integrityDecayRate());
+	mIntegrity = std::clamp(mIntegrity - decayAmount, 0, 100);
 
 	const auto level = integrityLevel();
 	if (level < IntegrityLevel::Worn && !disabled())
@@ -398,7 +415,8 @@ void Structure::updateIntegrityDecay()
 	}
 	else if (level < IntegrityLevel::Decayed && !destroyed())
 	{
-		if (randomNumber.generate(0, 100) < 10)
+		const auto breakdownChance = researchEffects.breakdownChancePercent();
+		if (breakdownChance > 0 && randomNumber.generate(0, 100) < breakdownChance)
 		{
 			destroy();
 		}

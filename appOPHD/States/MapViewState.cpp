@@ -24,6 +24,10 @@
 #include "../MapObjects/Robots.h"
 #include "../MapObjects/RobotTypeIndex.h"
 
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+
 #include "../MapObjects/Structures/CargoLander.h"
 #include "../MapObjects/Structures/ColonistLander.h"
 #include "../MapObjects/Structures/CommandCenter.h"
@@ -83,7 +87,8 @@ namespace
 	{
 		{RobotTypeIndex::Digger, RobotMeta{constants::Robodigger, 1}},
 		{RobotTypeIndex::Dozer, RobotMeta{constants::Robodozer, 0}},
-		{RobotTypeIndex::Miner, RobotMeta{constants::Robominer, 2}}
+		{RobotTypeIndex::Miner, RobotMeta{constants::Robominer, 2}},
+		{RobotTypeIndex::Explorer, RobotMeta{constants::Roboexplorer, 3}},
 	};
 
 
@@ -184,11 +189,13 @@ MapViewState::MapViewState(GameState& gameState, SavedGameFile& saveGameFile, Ev
 	mFileIoDialog{gameState.fileIoDialog()},
 	mGameOverDialog{{this, &MapViewState::onGameOver}},
 	mGameOptionsDialog{
+		{this, &MapViewState::onOpenKeyBindings},
 		{this, &MapViewState::onOpenSaveGameDialog},
 		{this, &MapViewState::onOpenLoadGameDialog},
 		{this, &MapViewState::onGameOver},
 		{this, &MapViewState::onReturnToGame},
 	},
+	mKeyBindingsDialog{mGameSettings, {this, &MapViewState::onCloseKeyBindings}},
 	mNotificationArea{{this, &MapViewState::onNotificationClicked}},
 	mNotificationWindow{{this, &MapViewState::onTakeMeThere}},
 	mPopulationPanel{mPopulationModel, mPopulationPool, mMorale},
@@ -230,11 +237,13 @@ MapViewState::MapViewState(GameState& gameState, const PlanetAttributes& planetA
 	mFileIoDialog{gameState.fileIoDialog()},
 	mGameOverDialog{{this, &MapViewState::onGameOver}},
 	mGameOptionsDialog{
+		{this, &MapViewState::onOpenKeyBindings},
 		{this, &MapViewState::onOpenSaveGameDialog},
 		{this, &MapViewState::onOpenLoadGameDialog},
 		{this, &MapViewState::onGameOver},
 		{this, &MapViewState::onReturnToGame},
 	},
+	mKeyBindingsDialog{mGameSettings, {this, &MapViewState::onCloseKeyBindings}},
 	mNotificationArea{{this, &MapViewState::onNotificationClicked}},
 	mNotificationWindow{{this, &MapViewState::onTakeMeThere}},
 	mPopulationPanel{mPopulationModel, mPopulationPool, mMorale},
@@ -315,6 +324,8 @@ void MapViewState::onDeactivate()
 {
 	mGameOverDialog.enabled(false);
 	mGameOptionsDialog.enabled(false);
+	mKeyBindingsDialog.enabled(false);
+	mKeyBindingsDialog.enabled(false);
 
 	hideUi();
 }
@@ -398,6 +409,28 @@ void MapViewState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*
 {
 	if (!active()) { return; }
 
+	if (key == NAS2D::KeyCode::Escape)
+	{
+		if (mKeyBindingsDialog.visible())
+		{
+			onCloseKeyBindings();
+			return;
+		}
+
+		if (mGameOptionsDialog.visible())
+		{
+			onReturnToGame();
+			return;
+		}
+
+		if (!modalUiElementDisplayed())
+		{
+			onSystemMenu();
+		}
+
+		return;
+	}
+
 	// FIXME: Ugly / hacky
 	if (modalUiElementDisplayed())
 	{
@@ -412,6 +445,18 @@ void MapViewState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*
 	if (key == NAS2D::KeyCode::F1)
 	{
 		mReportsState.showReport();
+		return;
+	}
+
+	if (mGameSettings.isPlaceRobotKey(key) && mMapObjectPicker.isInsertingRobot())
+	{
+		placeRobotAtCursor();
+		return;
+	}
+
+	if (const auto robotType = mGameSettings.robotForKey(key))
+	{
+		armRobot(*robotType);
 		return;
 	}
 
@@ -673,8 +718,24 @@ void MapViewState::onClickMap()
 
 void MapViewState::onSystemMenu()
 {
+	mKeyBindingsDialog.hide();
 	mGameOptionsDialog.show();
 	resetUi();
+}
+
+
+void MapViewState::onOpenKeyBindings()
+{
+	mGameOptionsDialog.hide();
+	mKeyBindingsDialog.refreshLabels();
+	mKeyBindingsDialog.show();
+}
+
+
+void MapViewState::onCloseKeyBindings()
+{
+	mKeyBindingsDialog.hide();
+	mGameOptionsDialog.show();
 }
 
 /**
@@ -865,7 +926,8 @@ void MapViewState::placeStructure(Tile& tile, StructureID structureID)
 		}
 
 		// Check build cost
-		if (!StructureCatalog::canBuild(structureID, mResourcesCount))
+		const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+		if (researchEffects.adjustedBuildCost(StructureCatalog::costToBuild(structureID)) > mResourcesCount)
 		{
 			resourceShortageMessage(mResourcesCount, structureID);
 			return;
@@ -886,11 +948,25 @@ void MapViewState::placeStructure(Tile& tile, StructureID structureID)
 			dynamic_cast<MaintenanceFacility&>(structure).resources(mResourcesCount);
 		}
 
-		auto cost = StructureCatalog::costToBuild(structureID);
+		auto cost = researchEffects.adjustedBuildCost(StructureCatalog::costToBuild(structureID));
 		removeRefinedResources(cost);
 		updatePlayerResources();
 		updateStructuresAvailability();
 	}
+}
+
+
+void MapViewState::armRobot(RobotTypeIndex robotTypeIndex)
+{
+	if (!mRobotPool.robotAvailable(robotTypeIndex)) { return; }
+	mMapObjectPicker.selectRobot(robotTypeIndex);
+}
+
+
+void MapViewState::placeRobotAtCursor()
+{
+	if (!mMapObjectPicker.isInsertingRobot() || !mDetailMap->isMouseOverTile()) { return; }
+	placeRobot(mDetailMap->mouseTile(), mMapObjectPicker.selectedRobotIndex());
 }
 
 
@@ -915,6 +991,10 @@ void MapViewState::placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex)
 		break;
 	case RobotTypeIndex::Miner:
 		placeRobominer(tile);
+		break;
+	case RobotTypeIndex::Explorer:
+		if (tile.mapObject() || tile.hasStructure() || !tile.isBulldozed()) { return; }
+		mRobotPool.deployExplorer(tile);
 		break;
 	default:
 		break;
@@ -1010,7 +1090,8 @@ void MapViewState::placeRobodozer(Tile& tile)
 			updatePoliceOverlay();
 		}
 
-		const auto& recycledResources = StructureCatalog::recyclingValue(structure->structureId());
+		const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+		const auto recycledResources = researchEffects.adjustedRecyclingValue(StructureCatalog::recyclingValue(structure->structureId()));
 		const auto& wastedResources = addRefinedResources(recycledResources);
 
 		if (!wastedResources.isEmpty())
@@ -1175,8 +1256,12 @@ void MapViewState::populateRobotMenu()
 {
 	mRobots.clear();
 
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+
 	for (auto& [robotTypeIndex, robotMeta] : RobotMetaTable)
 	{
+		if (robotTypeIndex == RobotTypeIndex::Explorer && !researchEffects.explorerBotUnlocked) { continue; }
+
 		if (mRobotPool.robotAvailable(robotTypeIndex))
 		{
 			mRobots.addItem({robotMeta.name, robotMeta.sheetIndex, static_cast<int>(robotTypeIndex)});

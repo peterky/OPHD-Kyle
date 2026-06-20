@@ -19,6 +19,7 @@ public:
 	using ClickHandler = NAS2D::Delegate<void()>;
 
 	GameOptionsDialog(
+		ClickHandler keyBindingsClickHandler,
 		ClickHandler saveClickHandler,
 		ClickHandler loadClickHandler,
 		ClickHandler exitClickHandler,
@@ -34,6 +35,7 @@ protected:
 
 private:
 	ClickHandler mContinueClickHandler;
+	Button btnKeyBindings;
 	Button btnSave;
 	Button btnLoad;
 	Button btnHelp;

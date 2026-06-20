@@ -176,6 +176,7 @@
     <ClCompile Include="Population\PopulationModel.cpp" />
     <ClCompile Include="Population\PopulationPool.cpp" />
     <ClCompile Include="Population\PopulationTable.cpp" />
+    <ClCompile Include="Technology\ColonyResearchEffects.cpp" />
     <ClCompile Include="Technology\ResearchTracker.cpp" />
     <ClCompile Include="Technology\TechnologyCatalog.cpp" />
   </ItemGroup>
@@ -209,6 +210,7 @@
     <ClInclude Include="Population\PopulationPool.h" />
     <ClInclude Include="Population\PopulationRequirements.h" />
     <ClInclude Include="Population\PopulationTable.h" />
+    <ClInclude Include="Technology\ColonyResearchEffects.h" />
     <ClInclude Include="Technology\ResearchTracker.h" />
     <ClInclude Include="Technology\Technology.h" />
     <ClInclude Include="Technology\TechnologyCatalog.h" />

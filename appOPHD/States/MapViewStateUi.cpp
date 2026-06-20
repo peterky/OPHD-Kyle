@@ -14,6 +14,10 @@
 #include "../Constants/UiConstants.h"
 
 #include "../StructureCatalog.h"
+
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 #include "../StructureManager.h"
 #include "../Map/TileMap.h"
 #include "../Map/MapView.h"
@@ -76,6 +80,8 @@ void MapViewState::initUi()
 	mGameOverDialog.hide();
 
 	mGameOptionsDialog.hide();
+	mKeyBindingsDialog.hide();
+	mKeyBindingsDialog.hide();
 
 	mAnnouncement.hide();
 	mMineOperationsWindow.hide();
@@ -192,6 +198,8 @@ void MapViewState::setupUiPositions(NAS2D::Vector<int> size)
 	mGameOverDialog.position(centerPosition(mGameOverDialog) - NAS2D::Vector{0, 100});
 	mAnnouncement.position(centerPosition(mAnnouncement) - NAS2D::Vector{0, 100});
 	mGameOptionsDialog.position(centerPosition(mGameOptionsDialog) - NAS2D::Vector{0, 100});
+	mKeyBindingsDialog.position(centerPosition(mKeyBindingsDialog) - NAS2D::Vector{0, 100});
+	mKeyBindingsDialog.position(centerPosition(mKeyBindingsDialog) - NAS2D::Vector{0, 100});
 
 	mDiggerDirection.position(NAS2D::Point{centerPosition(mDiggerDirection).x, size.y / 2 - 125});
 
@@ -243,6 +251,8 @@ void MapViewState::unhideUi()
 
 	mGameOverDialog.enabled(true);
 	mGameOptionsDialog.enabled(true);
+	mKeyBindingsDialog.enabled(true);
+	mKeyBindingsDialog.enabled(true);
 }
 
 
@@ -300,10 +310,12 @@ void MapViewState::populateStructureMenu()
  */
 void MapViewState::updateStructuresAvailability()
 {
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+
 	for (std::size_t id = 1; id < StructureCatalog::count(); ++id)
 	{
 		const auto& structureType = StructureCatalog::getType(id);
-		const auto hasSufficientResources = structureType.buildCost <= mResourcesCount;
+		const auto hasSufficientResources = researchEffects.adjustedBuildCost(structureType.buildCost) <= mResourcesCount;
 		mStructures.itemAvailable(structureType.name, hasSufficientResources);
 	}
 }
@@ -317,6 +329,7 @@ void MapViewState::updateStructuresAvailability()
 bool MapViewState::modalUiElementDisplayed() const
 {
 	return mGameOptionsDialog.visible() ||
+		mKeyBindingsDialog.visible() ||
 		mFileIoDialog.visible() ||
 		mGameOverDialog.visible();
 }
@@ -343,6 +356,7 @@ void MapViewState::drawUI()
 
 	mResourceInfoBar.update();
 	drawSystemButton();
+	drawResearchStatus();
 
 	mNotificationArea.update();
 
@@ -360,6 +374,8 @@ void MapViewState::drawUI()
 	// Windows
 	mFileIoDialog.update();
 	mGameOptionsDialog.update();
+	mKeyBindingsDialog.update();
+	mKeyBindingsDialog.update();
 	mWindowStack.update();
 
 	if (!modalUiElementDisplayed()) { mToolTip.update(); }

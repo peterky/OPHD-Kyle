@@ -12,7 +12,11 @@
 #include "../UI/DiggerDirection.h"
 #include "../UI/FactoryProduction.h"
 #include "../UI/GameOverDialog.h"
+#include "../GameSettings.h"
+#include "../GameSettings.h"
 #include "../UI/GameOptionsDialog.h"
+#include "../UI/KeyBindingsDialog.h"
+#include "../UI/KeyBindingsDialog.h"
 #include "../UI/IconGrid.h"
 #include "../UI/MajorEventAnnouncement.h"
 #include "../UI/MapObjectPicker.h"
@@ -138,6 +142,7 @@ private:
 	// DRAWING FUNCTIONS
 	void drawUI();
 	void drawSystemButton() const;
+	void drawResearchStatus();
 
 	// INSERT OBJECT HANDLING
 	void onDeployCargoLander();
@@ -151,6 +156,8 @@ private:
 	void placeTubes(Tile& tile);
 	void placeStructure(Tile& tile, StructureID structureID);
 	void placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex);
+	void placeRobotAtCursor();
+	void armRobot(RobotTypeIndex robotTypeIndex);
 
 	void placeRobodozer(Tile&);
 	void placeRobodigger(Tile&);
@@ -180,6 +187,7 @@ private:
 
 	void updatePlayerResources();
 	void updateResearch();
+	void updateResearchStatusDisplay();
 
 	// TURN LOGIC
 	void checkColonyShip();
@@ -241,6 +249,8 @@ private:
 
 	void onNotificationClicked(const NotificationArea::Notification&);
 
+	void onOpenKeyBindings();
+	void onCloseKeyBindings();
 	void onOpenSaveGameDialog();
 	void onOpenLoadGameDialog();
 	void onReturnToGame();
@@ -321,7 +331,9 @@ private:
 	FactoryProduction mFactoryProduction;
 	FileIo& mFileIoDialog;
 	GameOverDialog mGameOverDialog;
+	GameSettings mGameSettings;
 	GameOptionsDialog mGameOptionsDialog;
+	KeyBindingsDialog mKeyBindingsDialog;
 	MajorEventAnnouncement mAnnouncement;
 	MineOperationsWindow mMineOperationsWindow;
 	NotificationArea mNotificationArea;
@@ -345,6 +357,8 @@ private:
 	std::vector<Tile*> mConnectednessOverlay;
 	std::vector<Tile*> mCommRangeOverlay;
 	std::vector<std::vector<Tile*>> mPoliceOverlays;
+
+	std::string mResearchStatusText;
 
 	ResourceInfoBar mResourceInfoBar;
 	RobotDeploymentSummary mRobotDeploymentSummary;

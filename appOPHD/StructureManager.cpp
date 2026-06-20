@@ -20,6 +20,9 @@
 #include <libOPHD/EnumStructureID.h>
 #include <libOPHD/MapObjects/StructureType.h>
 #include <libOPHD/Population/PopulationPool.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
+
+#include "MapObjects/Structure.h"
 
 #include <NAS2D/ParserHelper.h>
 #include <NAS2D/Xml/XmlElement.h>
@@ -631,8 +634,10 @@ void StructureManager::assignScientistsToResearchFacilities(PopulationPool& popu
 }
 
 
-void StructureManager::update(const StorableResources& resources, PopulationPool& population)
+void StructureManager::update(const StorableResources& resources, PopulationPool& population, const ColonyResearchEffects& researchEffects)
 {
+	mColonyResearchEffects = researchEffects;
+	Structure::setActiveResearchEffects(&mColonyResearchEffects);
 	updateStructures(resources, population, mDeployedStructures);
 
 	assignColonistsToResidences(population);
@@ -679,7 +684,7 @@ void StructureManager::updateStructures(const StorableResources& resources, Popu
 
 void StructureManager::updateStructure(const StorableResources& resources, PopulationPool& population, Structure& structure)
 {
-	structure.processTurn();
+	structure.processTurn(mColonyResearchEffects);
 
 	// State Check
 	// ASSUMPTION:	Construction sites are considered self sufficient until they are

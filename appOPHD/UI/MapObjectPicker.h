@@ -41,6 +41,7 @@ public:
 	RobotTypeIndex selectedRobotIndex() const;
 	void clearBuildMode();
 	void clearSelections();
+	bool selectRobot(RobotTypeIndex robotTypeIndex);
 
 	using ControlContainer::update;
 
