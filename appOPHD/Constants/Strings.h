@@ -15,7 +15,7 @@ namespace constants
 	// =====================================
 	// = MISCELLANEOUS
 	// =====================================
-	const std::string Version = "v0.8.10";
+	const std::string Version = "v0.8.10-kyle.2";
 
 	const std::string TileBulldozed = "Bulldozed";
 	const std::string TileClear = "Clear";
@@ -34,6 +34,8 @@ namespace constants
 	// = SAVE GAMES
 	// =====================================
 	const std::string SaveGamePath = "savegames/";
+	const std::string AutoSaveFilename = "autosave";
+	const std::string AutoSaveBackupFilename = "autosave_prev";
 	const std::string SaveGameVersion = "0.31";
 	const std::string SaveGameRootNode = "OutpostHD_SaveGame";
 
@@ -100,8 +102,9 @@ namespace constants
 	const std::string WindowFileIoSave = "Save";
 	const std::string WindowFileIoDelete = "Delete";
 
-	const std::string WindowSystemTitle = "Options";
-	const std::string OptionsKeyBindings = "Key Bindings";
+	const std::string WindowSystemTitle = "Game Menu";
+	const std::string OptionsKeyBindings = "Game Settings";
+	const std::string OptionsGameSettings = "Game Settings";
 
 	// =====================================
 	// = UI STRINGS
@@ -135,7 +138,16 @@ namespace constants
 	const std::string ToolTipEnergy = "Energy Availability. Available / Total Production";
 	const std::string ToolTipPopulation = "Population and Morale details";
 	const std::string ToolTipCurrentTurns = "Current turn count";
-	const std::string ToolTipSystemMenu = "System Menu";
+	const std::string ToolTipSystemMenu = "System Menu (Esc)";
+	const std::string ToolTipMaintenanceDone = "Maintenance this turn. Repaired / still pending / required at turn start";
+	const std::string ToolTipMaintenanceCrew = "Maintenance crew. Assigned this turn / total capacity across facilities";
+	const std::string ToolTipMaintenanceParts = "Maintenance parts in storage. On hand / total capacity across facilities";
+	const std::string ToolTipRobotCommand = "Robot command capacity. In use / maximum";
+	const std::string ToolTipRobotDigger = "Robodiggers. Available in pool / total built";
+	const std::string ToolTipRobotDozer = "Robodozers. Available in pool / total built";
+	const std::string ToolTipRobotMiner = "Robominers. Available in pool / total built";
+	const std::string ToolTipRobotExplorer = "RoboExplorers. Available in pool / total built";
+	const std::string ToolTipRobotTrucks = "Haul trucks. Available in warehouses / deployed at mines / total";
 
 	// =====================================
 	// = UI STRINGS
@@ -170,6 +182,8 @@ namespace constants
 	const std::string AlertStructureInWay = "A " + Robodigger + " cannot be placed on a Structure.";
 
 	const std::string AlertOutOfCommRange = "The selected tile is out of communications range.";
+	const std::string AlertRobotTileNotReady = "This underground tile has not been excavated yet.";
+	const std::string AlertRobotCommandCapacity = "All robot command capacity is in use. Finish current robot tasks or build a Robot Command facility.";
 
 	const std::string AlertLanderLocation = "Lander Location";
 	const std::string AlertSeedTerrain = "The SEED Lander cannot be placed on or near Impassable terrain.";

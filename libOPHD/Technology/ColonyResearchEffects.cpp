@@ -38,7 +38,7 @@ namespace
 		{
 			effects.disasterPredictions.insert(unlock.value);
 
-			if (unlock.value == "no_more_plagues_placeholder")
+			if (unlock.value == "plague_immunity" || unlock.value == "no_more_plagues_placeholder")
 			{
 				effects.plagueImmunity = true;
 				effects.populationMortalityReduction += 0.05f;
@@ -58,12 +58,12 @@ namespace
 		else if (unlock.value == "Smelter2") { effects.smelterEfficiency += 0.20f; }
 		else if (unlock.value == "SolarPanel2") { effects.solarEnergyBonus += 0.25f; }
 		else if (unlock.value == "RobotCommand2") { effects.robotCommandCapacityBonus += 0.50f; }
-		else if (unlock.value == "placeholder_factory_production_upgrade") { effects.factoryProductionSpeedBonus += 0.25f; }
-		else if (unlock.value == "placeholder_research_speed_upgrade") { effects.researchSpeedBonus += 0.25f; }
-		else if (unlock.value == "placeholder_robots_work_faster") { effects.robotTaskSpeedBonus += 0.25f; }
-		else if (unlock.value == "placeholder_faster_robots") { effects.robotTaskSpeedBonus += 0.15f; }
-		else if (unlock.value == "placeholder_spider_team_can_clear_mountains?") { effects.leggedRobotsUnlocked = true; effects.robotTaskSpeedBonus += 0.10f; }
-		else if (unlock.value == "placeholder_or_maybe_let_dozers_do_that?") { effects.leggedRobotsUnlocked = true; effects.robotTaskSpeedBonus += 0.10f; }
+		else if (unlock.value == "factory_efficiency_upgrade" || unlock.value == "placeholder_factory_production_upgrade") { effects.factoryProductionSpeedBonus += 0.25f; }
+		else if (unlock.value == "research_efficiency_upgrade" || unlock.value == "placeholder_research_speed_upgrade") { effects.researchSpeedBonus += 0.25f; }
+		else if (unlock.value == "robot_vision_upgrade" || unlock.value == "placeholder_robots_work_faster") { effects.robotTaskSpeedBonus += 0.25f; }
+		else if (unlock.value == "robot_power_refit" || unlock.value == "placeholder_faster_robots") { effects.robotTaskSpeedBonus += 0.15f; }
+		else if (unlock.value == "legged_robots_clearance" || unlock.value == "placeholder_spider_team_can_clear_mountains?") { effects.leggedRobotsUnlocked = true; effects.robotTaskSpeedBonus += 0.10f; }
+		else if (unlock.value == "legged_robots_rough_terrain" || unlock.value == "placeholder_or_maybe_let_dozers_do_that?") { effects.leggedRobotsUnlocked = true; effects.robotTaskSpeedBonus += 0.10f; }
 		else if (unlock.value == "humanoid_worker") { effects.factoryProductionSpeedBonus += 0.10f; }
 		else if (unlock.value == "RID_EXPLORER_BOT") { effects.explorerBotUnlocked = true; }
 	}
@@ -178,6 +178,34 @@ int ColonyResearchEffects::adjustedFactoryTurns(int baseTurns) const
 }
 
 
+int ColonyResearchEffects::adjustedMineProductionRate(int baseRate) const
+{
+	const auto bonus = std::min(miningEfficiency, 0.50f);
+	return std::max(1, static_cast<int>(baseRate * (1.0f + bonus) + 0.5f));
+}
+
+
+int ColonyResearchEffects::adjustedOreHaulCapacity(int baseCapacity) const
+{
+	const auto bonus = std::min(oreHaulEfficiency, 1.0f);
+	return std::max(0, static_cast<int>(baseCapacity * (1.0f + bonus) + 0.5f));
+}
+
+
+int ColonyResearchEffects::adjustedSmeltingOreThreshold(int baseThreshold) const
+{
+	const auto bonus = std::min(smelterEfficiency, 0.90f);
+	return std::max(1, static_cast<int>(baseThreshold * (1.0f - bonus) + 0.5f));
+}
+
+
+int ColonyResearchEffects::adjustedSmeltingOutput(int baseOutput) const
+{
+	const auto bonus = std::min(smelterEfficiency, 2.50f);
+	return std::max(1, static_cast<int>(baseOutput * (1.0f + bonus) + 0.5f));
+}
+
+
 int ColonyResearchEffects::adjustedResearchPoints(int basePoints) const
 {
 	const auto speedBonus = std::min(researchSpeedBonus, 2.0f);
@@ -187,7 +215,7 @@ int ColonyResearchEffects::adjustedResearchPoints(int basePoints) const
 
 int ColonyResearchEffects::adjustedRobotTaskTurns(int baseTurns) const
 {
-	const auto speedBonus = std::min(robotTaskSpeedBonus + (leggedRobotsUnlocked ? 0.05f : 0.0f), 0.90f);
+	const auto speedBonus = std::clamp(robotTaskSpeedBonus + (leggedRobotsUnlocked ? 0.05f : 0.0f), 0.0f, 0.90f);
 	return std::max(1, static_cast<int>(baseTurns * (1.0f - speedBonus) + 0.5f));
 }
 
@@ -228,6 +256,24 @@ int ColonyResearchEffects::adjustedBioWasteProcessing(int baseCapacity) const
 }
 
 
+int ColonyResearchEffects::adjustedFoodProduction(int baseProduction) const
+{
+	if (baseProduction <= 0) { return 0; }
+
+	const auto bonus = std::min(agricultureEfficiency, 2.0f);
+	return std::max(1, static_cast<int>(baseProduction * (1.0f + bonus) + 0.5f));
+}
+
+
+int ColonyResearchEffects::adjustedExplorerYield(int baseYield) const
+{
+	if (baseYield <= 0) { return 1; }
+
+	const auto bonus = std::min(explorerEfficiency, 2.0f);
+	return std::max(1, static_cast<int>(baseYield * (1.0f + bonus) + 0.5f));
+}
+
+
 bool ColonyResearchEffects::hasDisasterPrediction(const std::string& disasterType) const
 {
 	return disasterPredictions.find(disasterType) != disasterPredictions.end();
@@ -241,9 +287,12 @@ ColonyResearchEffects computeColonyResearchEffects(const ResearchTracker& tracke
 	effects.structureDecayReduction = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::StructureDecay);
 	effects.breakdownReduction = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::BreakdownRate);
 	effects.agricultureEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::AgricultureEfficiency);
+	effects.explorerEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::ExplorerEfficiency);
 	effects.educationEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::EducationEfficiency);
 	effects.recyclingEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::RecyclingEfficiency);
 	effects.smelterEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::SmelterEfficiency);
+	effects.miningEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::MiningEfficiency);
+	effects.oreHaulEfficiency = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::OreHaulEfficiency);
 	effects.structureCostReduction = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::StructureCost);
 	effects.populationFertilityBonus = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::PopulationFertility);
 	effects.populationMoraleBonus = sumCompletedModifier(tracker, catalog, Technology::Modifier::Modifies::PopulationMorale);

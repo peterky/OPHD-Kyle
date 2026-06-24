@@ -3,8 +3,10 @@
 #include "RobotType.h"
 #include "../Constants/Strings.h"
 #include "../Map/Tile.h"
+#include "Structure.h"
 
 #include <libOPHD/Map/MapCoordinate.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <NAS2D/Dictionary.h>
 
@@ -15,16 +17,23 @@ namespace
 {
 	constexpr int MinerTaskTime{6};
 	constexpr int DiggerTaskTime{5};
+	constexpr int ExplorerTaskTime{3};
 
 	const std::array robotTypes{
 		RobotType{constants::Robodigger, "robots/robodigger.sprite", "ui/interface/product_robodigger.png", DiggerTaskTime},
 		RobotType{constants::Robodozer, "robots/robodozer.sprite", "ui/interface/product_robodozer.png", 0},
 		RobotType{constants::Robominer, "robots/robominer.sprite", "ui/interface/product_robominer.png", MinerTaskTime},
+		RobotType{constants::Roboexplorer, "robots/roboexplorer.sprite", "ui/interface/product_roboexplorer.png", ExplorerTaskTime},
 	};
 
 	int getTaskTime(RobotTypeIndex robotTypeIndex, Tile& tile)
 	{
-		return std::max(1, Robot::robotType(robotTypeIndex).basicTaskTime + static_cast<int>(tile.index()));
+		const auto baseTaskTime = std::max(1, Robot::robotType(robotTypeIndex).basicTaskTime + static_cast<int>(tile.index()));
+		if (const auto* researchEffects = Structure::activeResearchEffects())
+		{
+			return researchEffects->adjustedRobotTaskTurns(baseTaskTime);
+		}
+		return baseTaskTime;
 	}
 }
 
