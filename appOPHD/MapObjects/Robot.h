@@ -24,6 +24,8 @@ public:
 	using TaskCompleteDelegate = NAS2D::Delegate<void(Robot&)>;
 
 	static const RobotType& robotType(RobotTypeIndex robotTypeIndex);
+	static int maxTaskTurns(RobotTypeIndex robotTypeIndex);
+	static int clampTaskTurns(RobotTypeIndex robotTypeIndex, int turns);
 
 public:
 	Robot(RobotTypeIndex robotTypeIndex);
@@ -43,6 +45,8 @@ public:
 	virtual void abortTask();
 
 	bool isPlaced() const;
+	bool hasAssignedTile() const { return mTile != nullptr; }
+	void sanitizeTaskTurns();
 	Tile& tile();
 	const Tile& tile() const;
 	MapCoordinate mapCoordinate() const;
@@ -54,7 +58,7 @@ public:
 	bool selfDestruct() const { return mSelfDestruct; }
 	void selfDestruct(bool value) { mSelfDestruct = value; }
 
-	bool idle() const { return turnsToCompleteTask() == 0; }
+	bool idle() const { return turnsToCompleteTask() <= 0; }
 	void cancelTask() { mCancelTask = true; }
 	bool taskCanceled() const { return mCancelTask; }
 	void reset() { mCancelTask = false; }

@@ -1508,6 +1508,10 @@ void MapViewState::updateRobots()
 	for (auto* robotPointer : mDeployedRobots)
 	{
 		auto& robot = *robotPointer;
+		robot.sanitizeTaskTurns();
+
+		if (!robot.hasAssignedTile()) { continue; }
+
 		auto& tile = robot.tile();
 
 		robot.processTurn(*mTileMap, mStructureManager);
@@ -1538,8 +1542,6 @@ void MapViewState::updateRobots()
 			if (tile.mapObject() == &robot)
 			{
 				tile.removeMapObject();
-
-				onRobotTaskComplete(robot);
 			}
 
 			if (robot.taskCanceled())
@@ -1549,6 +1551,10 @@ void MapViewState::updateRobots()
 				robot.reset();
 
 				onRobotTaskCancel(robot);
+			}
+			else
+			{
+				onRobotTaskComplete(robot);
 			}
 		}
 	}

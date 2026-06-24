@@ -5,11 +5,13 @@
 #include "../Map/Tile.h"
 #include "Structure.h"
 
+#include <libOPHD/EnumTerrainType.h>
 #include <libOPHD/Map/MapCoordinate.h>
 #include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <NAS2D/Dictionary.h>
 
+#include <algorithm>
 #include <array>
 
 
@@ -29,11 +31,34 @@ namespace
 	int getTaskTime(RobotTypeIndex robotTypeIndex, Tile& tile)
 	{
 		const auto baseTaskTime = std::max(1, Robot::robotType(robotTypeIndex).basicTaskTime + static_cast<int>(tile.index()));
+		int taskTime = baseTaskTime;
 		if (const auto* researchEffects = Structure::activeResearchEffects())
 		{
-			return researchEffects->adjustedRobotTaskTurns(baseTaskTime);
+			taskTime = researchEffects->adjustedRobotTaskTurns(baseTaskTime);
 		}
-		return baseTaskTime;
+		return Robot::clampTaskTurns(robotTypeIndex, taskTime);
+	}
+}
+
+
+int Robot::maxTaskTurns(RobotTypeIndex robotTypeIndex)
+{
+	constexpr auto maxTerrainIndex = static_cast<int>(TerrainType::Impassable);
+	return std::max(1, robotType(robotTypeIndex).basicTaskTime + maxTerrainIndex);
+}
+
+
+int Robot::clampTaskTurns(RobotTypeIndex robotTypeIndex, int turns)
+{
+	return std::clamp(turns, 1, maxTaskTurns(robotTypeIndex));
+}
+
+
+void Robot::sanitizeTaskTurns()
+{
+	if (mTurnsToCompleteTask > 0)
+	{
+		mTurnsToCompleteTask = clampTaskTurns(mRobotTypeIndex, mTurnsToCompleteTask);
 	}
 }
 
@@ -89,8 +114,7 @@ void Robot::startTask(Tile& tile)
 
 void Robot::startTask(Tile& tile, int turns)
 {
-	if (turns < 1) { throw std::runtime_error("Robot task time must be at least 1 turn"); }
-	mTurnsToCompleteTask = turns;
+	mTurnsToCompleteTask = clampTaskTurns(mRobotTypeIndex, turns);
 	mTile = &tile;
 }
 

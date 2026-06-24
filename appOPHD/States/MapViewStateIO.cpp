@@ -6,10 +6,13 @@
 
 #include "MapViewState.h"
 #include "ColonyShip.h"
+#include "ReportsState.h"
 
 #include "MapViewStateHelper.h"
 
 #include "../CacheImage.h"
+#include "../ColonyDiagnostics.h"
+#include "../Constants/Strings.h"
 #include "../SavedGameFile.h"
 #include "../IOHelper.h"
 #include "../StructureManager.h"
@@ -34,6 +37,7 @@
 #include "../UI/MiniMap.h"
 
 #include <libOPHD/EnumDifficulty.h>
+#include <libOPHD/EnumProductType.h>
 #include <libOPHD/MeanSolarDistance.h>
 #include <libOPHD/XmlSerializer.h>
 #include <libOPHD/Population/MoraleChangeEntry.h>
@@ -49,6 +53,7 @@
 #include <NAS2D/ParserHelper.h>
 #include <NAS2D/ContainerUtils.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -188,13 +193,16 @@ namespace
 }
 
 
-void MapViewState::save(SavedGameFile& savedGameFile)
+void MapViewState::save(SavedGameFile& savedGameFile, bool showOverlay)
 {
-	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
-	renderer.drawBoxFilled(NAS2D::Rectangle{{0, 0}, renderer.size()}, NAS2D::Color{0, 0, 0, 100});
-	const auto imageSaving = &getImage("sys/saving.png");
-	renderer.drawImage(*imageSaving, renderer.center() - imageSaving->size() / 2);
-	renderer.update();
+	if (showOverlay)
+	{
+		auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
+		renderer.drawBoxFilled(NAS2D::Rectangle{{0, 0}, renderer.size()}, NAS2D::Color{0, 0, 0, 100});
+		const auto imageSaving = &getImage("sys/saving.png");
+		renderer.drawImage(*imageSaving, renderer.center() - imageSaving->size() / 2);
+		renderer.update();
+	}
 
 	auto* root = &savedGameFile.root();
 
@@ -208,6 +216,8 @@ void MapViewState::save(SavedGameFile& savedGameFile)
 	root->linkEndChild(NAS2D::dictionaryToAttributes("turns", NAS2D::Dictionary{{{"count", mTurnCount}}}));
 
 	const auto& population = mPopulationModel.getPopulations();
+	const auto& populationGrowth = mPopulationModel.populationGrowth();
+	const auto& populationDeath = mPopulationModel.populationDeath();
 	root->linkEndChild(NAS2D::dictionaryToAttributes(
 		"population",
 		NAS2D::Dictionary{{
@@ -221,7 +231,19 @@ void MapViewState::save(SavedGameFile& savedGameFile)
 			{"workers", population.worker},
 			{"scientists", population.scientist},
 			{"retired", population.retiree},
+			{"growth_child", populationGrowth.child},
+			{"growth_student", populationGrowth.student},
+			{"growth_worker", populationGrowth.worker},
+			{"growth_scientist", populationGrowth.scientist},
+			{"growth_retiree", populationGrowth.retiree},
+			{"death_child", populationDeath.child},
+			{"death_student", populationDeath.student},
+			{"death_worker", populationDeath.worker},
+			{"death_scientist", populationDeath.scientist},
+			{"death_retiree", populationDeath.retiree},
 			{"mean_crime", mPopulationPanel.crimeRate()},
+			{"retraining_rate", mPopulationModel.retrainingRatePerTurn()},
+			{"university_scientist_percent", mPopulationModel.universityScientistPercent()},
 		}}
 	));
 
@@ -234,6 +256,7 @@ void MapViewState::save(SavedGameFile& savedGameFile)
 		));
 	}
 	root->linkEndChild(moraleChangeReasons);
+	root->linkEndChild(mProductionHistory.serialize());
 }
 
 
@@ -312,6 +335,9 @@ void MapViewState::load(SavedGameFile& savedGameFile)
 	readTurns(root->firstChildElement("turns"));
 
 	readMoraleChanges(root->firstChildElement("morale_change"));
+	mProductionHistory.deserialize(root->firstChildElement("production_history"));
+	mReportsState.injectProductionHistory(mProductionHistory);
+	mReportsState.injectWorkforce(mPopulationModel, mPopulationPool);
 
 	updateConnectedness();
 
@@ -397,9 +423,12 @@ void MapViewState::readRobots(NAS2D::Xml::XmlElement* element)
 		{
 			auto& tile = mTileMap->getTile({{x, y}, depth});
 			mRobotPool.deploy(robot, tile);
-			robot.startTask(tile, productionTime);
+			robot.startTask(tile, Robot::clampTaskTurns(robotTypeIndex, productionTime));
 			tile.bulldoze();
-			tile.excavate();
+			if (robotTypeIndex == RobotTypeIndex::Digger)
+			{
+				tile.excavate();
+			}
 		}
 	}
 
@@ -424,7 +453,8 @@ void MapViewState::readStructures(NAS2D::Xml::XmlElement* element)
 		const auto integrity = dictionary.get<int>("integrity", 100);
 
 		const auto productionCompleted = dictionary.get<int>("production_completed", 0);
-		const auto productionType = dictionary.get<int>("production_type", 0);
+		const auto productionType = dictionary.get<int>("production_type", static_cast<int>(ProductType::PRODUCT_NONE));
+		const auto productionWaiting = dictionary.get<int>("production_waiting", static_cast<int>(ProductType::PRODUCT_NONE));
 
 		const auto pop0 = dictionary.get<int>("pop0");
 		const auto pop1 = dictionary.get<int>("pop1");
@@ -435,6 +465,13 @@ void MapViewState::readStructures(NAS2D::Xml::XmlElement* element)
 		tile.excavate();
 
 		auto& structure = mStructureManager.create(structureId, tile);
+
+		int savedFoodLevel{0};
+		const auto* foodStorage = structure.isFoodStore() ? structureElement->firstChildElement("food") : nullptr;
+		if (foodStorage)
+		{
+			savedFoodLevel = NAS2D::attributesToDictionary(*foodStorage).get<int>("level");
+		}
 
 		structure.age(age);
 		structure.forcedStateChange(state, disabledReason, idleReason);
@@ -479,15 +516,12 @@ void MapViewState::readStructures(NAS2D::Xml::XmlElement* element)
 
 		if (structure.isFoodStore())
 		{
-			auto& foodProduction = dynamic_cast<FoodProduction&>(structure);
-
-			auto foodStorage = structureElement->firstChildElement("food");
 			if (foodStorage == nullptr)
 			{
 				throw std::runtime_error("MapViewState::readStructures(): FoodProduction structure saved without a food level node.");
 			}
 
-			foodProduction.foodLevel(NAS2D::attributesToDictionary(*foodStorage).get<int>("level"));
+			dynamic_cast<FoodProduction&>(structure).foodLevel(savedFoodLevel);
 		}
 
 		if (auto* residence = dynamic_cast<Residence*>(&structure))
@@ -521,8 +555,24 @@ void MapViewState::readStructures(NAS2D::Xml::XmlElement* element)
 		if (structure.isFactory())
 		{
 			auto& factory = dynamic_cast<Factory&>(structure);
-			factory.productType(static_cast<ProductType>(productionType));
-			factory.productionTurnsCompleted(productionCompleted);
+			const auto requestedProduct = static_cast<ProductType>(productionType);
+			factory.productType(requestedProduct);
+
+			if (requestedProduct != ProductType::PRODUCT_NONE && factory.productType() == ProductType::PRODUCT_NONE)
+			{
+				factory.productionTurnsCompleted(0);
+			}
+			else
+			{
+				factory.productionTurnsCompleted(productionCompleted);
+				const auto waitingProduct = static_cast<ProductType>(productionWaiting);
+				if (waitingProduct != ProductType::PRODUCT_NONE &&
+					std::find(factory.productList().begin(), factory.productList().end(), waitingProduct) != factory.productList().end())
+				{
+					factory.productWaiting(waitingProduct);
+				}
+			}
+
 			factory.resourcePool(&mResourcesCount);
 			factory.productionCompleteHandler({this, &MapViewState::onFactoryProductionComplete});
 		}
@@ -571,6 +621,26 @@ void MapViewState::readPopulation(NAS2D::Xml::XmlElement* element)
 		mPopulationPanel.crimeRate(meanCrimeRate);
 
 		mPopulationModel.addPopulation({children, students, workers, scientists, retired});
+
+		mPopulationModel.setPopulationProgress(
+			{
+				dictionary.get<int>("growth_child", 0),
+				dictionary.get<int>("growth_student", 0),
+				dictionary.get<int>("growth_worker", 0),
+				dictionary.get<int>("growth_scientist", 0),
+				dictionary.get<int>("growth_retiree", 0),
+			},
+			{
+				dictionary.get<int>("death_child", 0),
+				dictionary.get<int>("death_student", 0),
+				dictionary.get<int>("death_worker", 0),
+				dictionary.get<int>("death_scientist", 0),
+				dictionary.get<int>("death_retiree", 0),
+			}
+		);
+
+		mPopulationModel.setRetrainingRatePerTurn(dictionary.get<int>("retraining_rate", 0));
+		mPopulationModel.setUniversityScientistPercent(dictionary.get<int>("university_scientist_percent", -1));
 	}
 }
 
@@ -588,4 +658,32 @@ void MapViewState::readMoraleChanges(NAS2D::Xml::XmlElement* moraleChangeElement
 
 		mMorale.journalMoraleChange({message, val});
 	}
+}
+
+
+void MapViewState::tryAutoSave()
+{
+	if (!mGameSettings.autosaveEnabled()) { return; }
+
+	const auto interval = mGameSettings.autosaveIntervalTurns();
+	if (interval <= 0 || mTurnCount <= 0 || (mTurnCount % interval) != 0) { return; }
+	if (mGameOverDialog.visible()) { return; }
+
+	const auto savePath = constants::SaveGamePath + constants::AutoSaveFilename + ".xml";
+	const auto backupPath = constants::SaveGamePath + constants::AutoSaveBackupFilename + ".xml";
+
+	auto& filesystem = NAS2D::Utility<NAS2D::Filesystem>::get();
+	if (filesystem.exists(NAS2D::VirtualPath{savePath}))
+	{
+		filesystem.writeFile(NAS2D::VirtualPath{backupPath}, filesystem.readFile(NAS2D::VirtualPath{savePath}));
+	}
+
+	SavedGameFile savedGameFile;
+	save(savedGameFile, false);
+
+	NAS2D::Xml::XmlMemoryBuffer buff;
+	savedGameFile.savedGameDocument().accept(&buff);
+	filesystem.writeFile(NAS2D::VirtualPath{savePath}, buff.buffer());
+
+	ColonyDiagnostics::notifyAutoSave(mTurnCount, savePath);
 }
