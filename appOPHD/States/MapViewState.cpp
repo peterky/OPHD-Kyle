@@ -1117,7 +1117,7 @@ void MapViewState::placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex)
 	}
 
 	mRobotPool.update();
-	if (!mRobotPool.isControlCapacityAvailable())
+	if (robotTypeIndex != RobotTypeIndex::Dozer && !mRobotPool.isControlCapacityAvailable())
 	{
 		doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertRobotCommandCapacity);
 		return;
@@ -1158,14 +1158,24 @@ void MapViewState::placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex)
 
 void MapViewState::placeRobodozer(Tile& tile)
 {
-	mRobotPool.reclaimStuckDozers();
-
-	if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+	const auto coord = tile.xyz();
+	const auto alreadyQueued = std::find_if(mDozerQueue.begin(), mDozerQueue.end(), [&coord](const MapCoordinate& queued) {
+		return queued.xy == coord.xy && queued.z == coord.z;
+	});
+	if (alreadyQueued == mDozerQueue.end())
 	{
-		doAlertMessage(constants::AlertInvalidRobotPlacement, "No idle Robodozers are available. Stuck dozers were cleared — try again.");
-		populateRobotMenu();
-		return;
+		mDozerQueue.push_back(coord);
 	}
+
+	processDozerQueue();
+}
+
+
+bool MapViewState::executeRobodozerAt(Tile& tile)
+{
+	if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer)) { return false; }
+
+	if (!mStructureManager.isInCommRange(tile.xy())) { return false; }
 
 	if (tile.mapObject() && !tile.hasStructure())
 	{
@@ -1178,20 +1188,19 @@ void MapViewState::placeRobodozer(Tile& tile)
 		}
 		else
 		{
-			return;
+			return false;
 		}
 	}
 	else if (tile.isBulldozed() && !tile.hasStructure())
 	{
-		doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertTileBulldozed);
-		return;
+		return false;
 	}
 	else if (tile.oreDeposit())
 	{
 		if (tile.oreDeposit()->digDepth() != mTileMap->maxDepth() || !tile.oreDeposit()->isExhausted())
 		{
 			doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertMineNotExhausted);
-			return;
+			return false;
 		}
 
 		mMineOperationsWindow.hide();
@@ -1216,17 +1225,17 @@ void MapViewState::placeRobodozer(Tile& tile)
 
 		Structure* structure = tile.structure();
 
-		if (structure->isMineFacility()) { return; }
+		if (structure->isMineFacility()) { return false; }
 		if (structure->isCommand())
 		{
 			doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertCannotBulldozeCc);
-			return;
+			return false;
 		}
 
 		if (structure->isLander() && structure->age() == 0)
 		{
 			doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertCannotBulldozeLandingSite);
-			return;
+			return false;
 		}
 
 		if (structure->isRobotCommand())
@@ -1238,7 +1247,7 @@ void MapViewState::placeRobodozer(Tile& tile)
 					"Cannot bulldoze Robot Command Center by a Robot under its command.",
 					tile.xyz(),
 					NotificationArea::NotificationType::Information});
-				return;
+				return false;
 			}
 		}
 
@@ -1251,7 +1260,7 @@ void MapViewState::placeRobodozer(Tile& tile)
 		{
 			auto* warehouse = dynamic_cast<Warehouse*>(structure);
 			if (simulateMoveProducts(warehouse)) { moveProducts(warehouse); }
-			else { return; }
+			else { return false; }
 		}
 
 		if (structure->isComms())
@@ -1285,12 +1294,47 @@ void MapViewState::placeRobodozer(Tile& tile)
 	}
 
 	mRobotPool.deployDozer(tile);
+	return true;
+}
 
-	if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+
+void MapViewState::processDozerQueue()
+{
+	mRobotPool.reclaimStuckDozers();
+
+	std::vector<MapCoordinate> pending;
+	pending.reserve(mDozerQueue.size());
+
+	for (const auto& coord : mDozerQueue)
 	{
-		mRobots.removeItem(constants::Robodozer);
-		mMapObjectPicker.clearBuildMode();
+		if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+		{
+			pending.push_back(coord);
+			continue;
+		}
+
+		auto& queuedTile = mTileMap->getTile(coord);
+		if (!executeRobodozerAt(queuedTile))
+		{
+			continue;
+		}
 	}
+
+	mDozerQueue = std::move(pending);
+	maintainDozerBuildMode();
+}
+
+
+void MapViewState::maintainDozerBuildMode()
+{
+	if (mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+	{
+		mMapObjectPicker.selectRobot(RobotTypeIndex::Dozer);
+		return;
+	}
+
+	mRobots.removeItem(constants::Robodozer);
+	mMapObjectPicker.clearBuildMode();
 }
 
 
@@ -1472,6 +1516,10 @@ void MapViewState::updateLeftSummaryLayout()
 
 void MapViewState::populateRobotMenu()
 {
+	const auto restoringRobot = mMapObjectPicker.isInsertingRobot()
+		? mMapObjectPicker.selectedRobotIndex()
+		: RobotTypeIndex::None;
+
 	mRobots.clear();
 
 	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
@@ -1488,6 +1536,11 @@ void MapViewState::populateRobotMenu()
 	}
 
 	mRobots.sort();
+
+	if (restoringRobot != RobotTypeIndex::None && mRobotPool.robotAvailable(restoringRobot))
+	{
+		mMapObjectPicker.selectRobot(restoringRobot);
+	}
 }
 
 

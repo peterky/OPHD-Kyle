@@ -169,6 +169,9 @@ private:
 	void armRobot(RobotTypeIndex robotTypeIndex);
 
 	void placeRobodozer(Tile&);
+	bool executeRobodozerAt(Tile& tile);
+	void processDozerQueue();
+	void maintainDozerBuildMode();
 	void placeRobodigger(Tile&);
 	void placeRobominer(Tile&);
 
@@ -403,4 +406,6 @@ private:
 
 	bool mConnectednessDirty{true};
 	bool mRoutesDirty{true};
+
+	std::vector<MapCoordinate> mDozerQueue;
 };

@@ -277,6 +277,7 @@ NAS2D::Xml::XmlElement* MapViewState::serializeProperties()
 
 void MapViewState::load(SavedGameFile& savedGameFile)
 {
+	mDozerQueue.clear();
 	resetUi();
 
 	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();

@@ -15,7 +15,7 @@ namespace constants
 	// =====================================
 	// = MISCELLANEOUS
 	// =====================================
-	const std::string Version = "v0.8.10-kyle.6";
+	const std::string Version = "v0.8.10-kyle.7";
 
 	const std::string TileBulldozed = "Bulldozed";
 	const std::string TileClear = "Clear";
