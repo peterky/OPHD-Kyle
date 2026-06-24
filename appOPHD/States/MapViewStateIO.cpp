@@ -426,19 +426,17 @@ void MapViewState::readRobots(NAS2D::Xml::XmlElement* element)
 		{
 			auto& tile = mTileMap->getTile({{x, y}, depth});
 
-			if (robotTypeIndex == RobotTypeIndex::Dozer)
+			const auto clampedTurns = Robot::clampTaskTurns(robotTypeIndex, productionTime);
+			if (robotTypeIndex == RobotTypeIndex::Dozer && productionTime > Robot::maxTaskTurns(robotTypeIndex))
 			{
 				++stuckDozersRepaired;
-				static_cast<Robodozer&>(robot).bulldozeTile(tile);
-				continue;
 			}
 
-			const auto clampedTurns = Robot::clampTaskTurns(robotTypeIndex, productionTime);
 			mRobotPool.restoreDeployed(robot, tile, clampedTurns);
-			tile.bulldoze();
 
 			if (robotTypeIndex == RobotTypeIndex::Digger)
 			{
+				tile.bulldoze();
 				tile.excavate();
 			}
 		}

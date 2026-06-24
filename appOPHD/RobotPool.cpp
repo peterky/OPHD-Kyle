@@ -277,7 +277,7 @@ void RobotPool::deployDigger(Tile& tile, Direction direction)
 void RobotPool::deployDozer(Tile& tile)
 {
 	auto& robot = getDozer();
-	static_cast<Robodozer&>(robot).bulldozeTile(tile);
+	deploy(robot, tile);
 }
 
 
@@ -285,13 +285,13 @@ void RobotPool::reclaimStuckDozers()
 {
 	for (auto& dozer : mDozers)
 	{
-		if (dozer.turnsToCompleteTask() <= 0) { continue; }
+		dozer.sanitizeTaskTurns();
 
-		dozer.detachFromTile();
-		dozer.resetTaskState();
+		if (dozer.turnsToCompleteTask() > 0 && !dozer.hasAssignedTile())
+		{
+			dozer.resetTaskState();
+		}
 	}
-
-	std::erase_if(mDeployedRobots, [](const Robot* robot) { return robot->type() == RobotTypeIndex::Dozer; });
 
 	mRobotControlCount = robotControlCount(mDiggers) + robotControlCount(mDozers)
 		+ robotControlCount(mMiners) + robotControlCount(mExplorers);
@@ -300,12 +300,6 @@ void RobotPool::reclaimStuckDozers()
 
 void RobotPool::restoreDeployed(Robot& robot, Tile& tile, int turns)
 {
-	if (robot.type() == RobotTypeIndex::Dozer)
-	{
-		static_cast<Robodozer&>(robot).bulldozeTile(tile);
-		return;
-	}
-
 	if (mRobotControlMax > 0 && mRobotControlCount >= mRobotControlMax)
 	{
 		throw std::runtime_error("Must increase robot command capacity before placing more robots: " + std::to_string(mRobotControlCount) + " / " + std::to_string(mRobotControlMax));
@@ -315,7 +309,16 @@ void RobotPool::restoreDeployed(Robot& robot, Tile& tile, int turns)
 	if (it != mDeployedRobots.end()) { throw std::runtime_error("RobotPool::restoreDeployed(): Attempting to add a duplicate Robot* pointer."); }
 
 	mDeployedRobots.push_back(&robot);
-	robot.startTask(tile, turns);
+
+	if (robot.type() == RobotTypeIndex::Dozer)
+	{
+		static_cast<Robodozer&>(robot).startTask(tile, turns);
+	}
+	else
+	{
+		robot.startTask(tile, turns);
+	}
+
 	tile.mapObject(&robot);
 
 	++mRobotControlCount;

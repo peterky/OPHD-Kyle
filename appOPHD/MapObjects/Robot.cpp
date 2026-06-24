@@ -56,16 +56,6 @@ int Robot::clampTaskTurns(RobotTypeIndex robotTypeIndex, int turns)
 
 void Robot::sanitizeTaskTurns()
 {
-	if (mRobotTypeIndex == RobotTypeIndex::Dozer)
-	{
-		if (mTurnsToCompleteTask > 0)
-		{
-			mTurnsToCompleteTask = 0;
-			detachFromTile();
-		}
-		return;
-	}
-
 	if (mTurnsToCompleteTask <= 0) { return; }
 
 	const auto maxTurns = maxTaskTurns(mRobotTypeIndex);

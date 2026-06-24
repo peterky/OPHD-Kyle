@@ -10,8 +10,8 @@ class Robodozer : public Robot
 public:
 	Robodozer();
 
-	void bulldozeTile(Tile& tile);
 	void startTask(Tile& tile) override;
+	void startTask(Tile& tile, int turns);
 	void abortTask() override;
 
 protected:

@@ -1117,7 +1117,7 @@ void MapViewState::placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex)
 	}
 
 	mRobotPool.update();
-	if (robotTypeIndex != RobotTypeIndex::Dozer && !mRobotPool.isControlCapacityAvailable())
+	if (!mRobotPool.isControlCapacityAvailable())
 	{
 		doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertRobotCommandCapacity);
 		return;
@@ -1174,6 +1174,7 @@ void MapViewState::placeRobodozer(Tile& tile)
 bool MapViewState::executeRobodozerAt(Tile& tile)
 {
 	if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer)) { return false; }
+	if (!mRobotPool.isControlCapacityAvailable()) { return false; }
 
 	if (!mStructureManager.isInCommRange(tile.xy())) { return false; }
 
@@ -1327,7 +1328,7 @@ void MapViewState::processDozerQueue()
 
 void MapViewState::maintainDozerBuildMode()
 {
-	if (mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+	if (mRobotPool.robotAvailable(RobotTypeIndex::Dozer) || !mDozerQueue.empty())
 	{
 		mMapObjectPicker.selectRobot(RobotTypeIndex::Dozer);
 		return;
@@ -1586,13 +1587,6 @@ void MapViewState::reconcileDeployedRobots()
 			auto& tile = mTileMap->getTile({point, depth});
 			auto* robot = tile.robot();
 			if (!robot) { continue; }
-
-			if (robot->type() == RobotTypeIndex::Dozer)
-			{
-				tile.removeMapObject();
-				static_cast<Robodozer&>(*robot).bulldozeTile(tile);
-				continue;
-			}
 
 			if (robot->idle() || robot->isDead())
 			{
