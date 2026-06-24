@@ -906,8 +906,7 @@ void MapViewState::nextTurn()
 
 	mMorale.closeJournal();
 
-	processDozerQueue();
-	mDozerQueue.clear();
+	processDozerQueue(false);
 
 	mMapObjectPicker.clearBuildMode();
 	mMapObjectPicker.clearSelections();

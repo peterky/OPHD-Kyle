@@ -283,15 +283,25 @@ void RobotPool::deployDozer(Tile& tile)
 
 void RobotPool::reclaimStuckDozers()
 {
-	for (auto& dozer : mDozers)
+	const auto sanitizeList = [](auto& list)
 	{
-		dozer.sanitizeTaskTurns();
-
-		if (dozer.turnsToCompleteTask() > 0 && !dozer.hasAssignedTile())
+		for (auto& robot : list)
 		{
-			dozer.resetTaskState();
+			robot.sanitizeTaskTurns();
+
+			if (robot.turnsToCompleteTask() > 0 && !robot.hasAssignedTile())
+			{
+				robot.resetTaskState();
+			}
 		}
-	}
+	};
+
+	sanitizeList(mDozers);
+	sanitizeList(mDiggers);
+	sanitizeList(mMiners);
+	sanitizeList(mExplorers);
+
+	std::erase_if(mDeployedRobots, [](const Robot* robot) { return !robot->hasAssignedTile(); });
 
 	mRobotControlCount = robotControlCount(mDiggers) + robotControlCount(mDozers)
 		+ robotControlCount(mMiners) + robotControlCount(mExplorers);

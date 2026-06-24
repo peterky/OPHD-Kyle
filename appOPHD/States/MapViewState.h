@@ -170,7 +170,7 @@ private:
 
 	void placeRobodozer(Tile&);
 	bool executeRobodozerAt(Tile& tile);
-	void processDozerQueue();
+	void processDozerQueue(bool maintainBuildMode = true);
 	void maintainDozerBuildMode();
 	void placeRobodigger(Tile&);
 	void placeRobominer(Tile&);

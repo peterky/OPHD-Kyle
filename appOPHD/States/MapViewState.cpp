@@ -1299,7 +1299,7 @@ bool MapViewState::executeRobodozerAt(Tile& tile)
 }
 
 
-void MapViewState::processDozerQueue()
+void MapViewState::processDozerQueue(bool maintainBuildMode)
 {
 	mRobotPool.reclaimStuckDozers();
 
@@ -1308,7 +1308,7 @@ void MapViewState::processDozerQueue()
 
 	for (const auto& coord : mDozerQueue)
 	{
-		if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+		if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer) || !mRobotPool.isControlCapacityAvailable())
 		{
 			pending.push_back(coord);
 			continue;
@@ -1317,12 +1317,18 @@ void MapViewState::processDozerQueue()
 		auto& queuedTile = mTileMap->getTile(coord);
 		if (!executeRobodozerAt(queuedTile))
 		{
+			if (queuedTile.isBulldozed() && !queuedTile.hasStructure()) { continue; }
+			pending.push_back(coord);
 			continue;
 		}
 	}
 
 	mDozerQueue = std::move(pending);
-	maintainDozerBuildMode();
+
+	if (maintainBuildMode)
+	{
+		maintainDozerBuildMode();
+	}
 }
 
 
@@ -1660,10 +1666,13 @@ void MapViewState::updateRobots()
 		}
 	}
 
-	std::erase_if(mDeployedRobots, [](const Robot* robot){ return robot->isDead() || robot->idle(); });
+	std::erase_if(mDeployedRobots, [](const Robot* robot) {
+		return robot->isDead() || robot->idle() || !robot->hasAssignedTile();
+	});
 
 	for (const auto* robot : mDeployedRobots)
 	{
+		if (!robot->hasAssignedTile()) { continue; }
 		pushAgingRobotMessage(robot, robot->mapCoordinate(), mNotificationArea);
 	}
 
