@@ -143,10 +143,10 @@ private:
 	void onMinerTaskComplete(Robot& robot);
 	void onExplorerTaskComplete(Robot& robot);
 
-	void onRobotSelfDestruct(const Robot& robot);
-	void onRobotBreakDown(const Robot& robot);
-	void onRobotTaskComplete(const Robot& robot);
-	void onRobotTaskCancel(const Robot& robot);
+	void onRobotSelfDestruct(const Robot& robot, MapCoordinate position);
+	void onRobotBreakDown(const Robot& robot, MapCoordinate position);
+	void onRobotTaskComplete(const Robot& robot, MapCoordinate position);
+	void onRobotTaskCancel(const Robot& robot, MapCoordinate position);
 
 	// DRAWING FUNCTIONS
 	void drawUI();

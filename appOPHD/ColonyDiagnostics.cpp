@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <iomanip>
 #include <mutex>
 #include <sstream>
@@ -165,7 +166,24 @@ namespace
 
 	void onTerminate()
 	{
-		writeCrashReport("std::terminate() called");
+		std::string details;
+		if (const auto current = std::current_exception())
+		{
+			try
+			{
+				std::rethrow_exception(current);
+			}
+			catch (const std::exception& exception)
+			{
+				details = exception.what();
+			}
+			catch (...)
+			{
+				details = "non-std::exception";
+			}
+		}
+
+		writeCrashReport("std::terminate() called", details);
 		std::abort();
 	}
 

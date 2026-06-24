@@ -1182,10 +1182,16 @@ bool MapViewState::executeRobodozerAt(Tile& tile)
 	{
 		if (auto* robot = tile.robot())
 		{
+			if (!robot->idle() && robot->type() == RobotTypeIndex::Dozer)
+			{
+				return true;
+			}
+
 			tile.removeMapObject();
 			robot->resetTaskState();
 			robot->detachFromTile();
 			std::erase(mDeployedRobots, robot);
+			mRobotPool.update();
 		}
 		else
 		{
@@ -1627,17 +1633,19 @@ void MapViewState::updateRobots()
 
 		if (!robot.hasAssignedTile()) { continue; }
 
+		const auto taskLocation = robot.mapCoordinate();
+
 		robot.processTurn(*mTileMap, mStructureManager);
 
 		if (robot.isDead())
 		{
 			if (robot.selfDestruct())
 			{
-				onRobotSelfDestruct(robot);
+				onRobotSelfDestruct(robot, taskLocation);
 			}
 			else if (robot.type() != RobotTypeIndex::Miner && robot.type() != RobotTypeIndex::Explorer)
 			{
-				onRobotBreakDown(robot);
+				onRobotBreakDown(robot, taskLocation);
 				robot.abortTask();
 			}
 
@@ -1657,11 +1665,11 @@ void MapViewState::updateRobots()
 				populateRobotMenu();
 				robot.reset();
 
-				onRobotTaskCancel(robot);
+				onRobotTaskCancel(robot, taskLocation);
 			}
 			else
 			{
-				onRobotTaskComplete(robot);
+				onRobotTaskComplete(robot, taskLocation);
 			}
 		}
 	}

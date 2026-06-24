@@ -9,12 +9,17 @@
 #include "../StructureManager.h"
 #include "../Map/TileMap.h"
 #include "../MapObjects/Robots.h"
+#include "../MapObjects/Robots/Roboexplorer.h"
 #include "../MapObjects/Structures/CommandCenter.h"
 #include "../MapObjects/Structures/Factory.h"
 #include "../MapObjects/Structures/MineFacility.h"
 #include "../MapObjects/Structures/SeedFactory.h"
 #include "../MapObjects/Structures/Tube.h"
 #include "../MapObjects/Structures/Warehouse.h"
+#include "../Constants/Strings.h"
+#include "../UI/NotificationArea.h"
+
+#include <libOPHD/Map/MapCoordinate.h>
 
 #include <libOPHD/DirectionOffset.h>
 #include <libOPHD/EnumIdleReason.h>
@@ -32,6 +37,7 @@ void MapViewState::pullRobotFromFactory(ProductType productType, Factory& factor
 		{ProductType::PRODUCT_DIGGER, RobotTypeIndex::Digger},
 		{ProductType::PRODUCT_DOZER, RobotTypeIndex::Dozer},
 		{ProductType::PRODUCT_MINER, RobotTypeIndex::Miner},
+		{ProductType::PRODUCT_EXPLORER, RobotTypeIndex::Explorer},
 	};
 
 	if (ProductTypeToRobotTypeIndex.find(productType) == ProductTypeToRobotTypeIndex.end())
@@ -49,6 +55,13 @@ void MapViewState::pullRobotFromFactory(ProductType productType, Factory& factor
 	else
 	{
 		factory.idle(IdleReason::FactoryInsufficientRobotCommandCapacity);
+		const std::string productName = productType == ProductType::PRODUCT_EXPLORER ? "Robo-Explorer" : "robot";
+		mNotificationArea.push({
+			"Robot pool full",
+			std::string{"A factory finished a "} + productName + " but cannot deliver it until robot command capacity increases. Explorers go to the unit pool (not warehouses). Build a Robot Command facility or retire deployed robots.",
+			factory.xyz(),
+			NotificationArea::NotificationType::Warning
+		});
 	}
 }
 
@@ -61,6 +74,7 @@ void MapViewState::onFactoryProductionComplete(Factory& factory)
 	case ProductType::PRODUCT_DIGGER:
 	case ProductType::PRODUCT_DOZER:
 	case ProductType::PRODUCT_MINER:
+	case ProductType::PRODUCT_EXPLORER:
 		pullRobotFromFactory(productType, factory);
 		break;
 
@@ -150,6 +164,7 @@ void MapViewState::onDeploySeedLander(NAS2D::Point<int> point)
 	mRobotPool.addRobot(RobotTypeIndex::Digger).taskCompleteHandler({this, &MapViewState::onDiggerTaskComplete});
 	mRobotPool.addRobot(RobotTypeIndex::Miner).taskCompleteHandler({this, &MapViewState::onMinerTaskComplete});
 
+	mRobotPool.update();
 	populateRobotMenu();
 }
 
@@ -199,14 +214,48 @@ void MapViewState::onMinerTaskComplete(Robot& robot)
 	auto& robotTile = robot.tile();
 	auto& miner = dynamic_cast<Robominer&>(robot);
 
+	markTopologyDirty();
 	auto& mineFacility = miner.buildMine(*mTileMap, robotTile.xyz());
 	mineFacility.extensionCompleteHandler({this, &MapViewState::onMineFacilityExtend});
 }
 
 
-void MapViewState::onRobotSelfDestruct(const Robot& robot)
+void MapViewState::onExplorerTaskComplete(Robot& robot)
 {
-	const auto& position = robot.mapCoordinate();
+	auto& explorer = dynamic_cast<Roboexplorer&>(robot);
+
+	if (explorer.discoveredDeposit())
+	{
+		markTopologyDirty();
+		const auto& locations = explorer.discoveredLocations();
+		const auto depositCount = explorer.discoveredCount();
+		const auto summary = depositCount == 1 ?
+			std::string{" identified a new mining beacon."} :
+			std::string{" identified "} + std::to_string(depositCount) + " new mining beacons.";
+
+		mNotificationArea.push({
+			"Ore Deposit Discovered",
+			constants::Roboexplorer + summary,
+			MapCoordinate{locations.front(), 0},
+			NotificationArea::NotificationType::Success
+		});
+	}
+	else
+	{
+		mNotificationArea.push({
+			"Survey Complete",
+			constants::Roboexplorer + " completed its survey but could not place a mining beacon.",
+			robot.mapCoordinate(),
+			NotificationArea::NotificationType::Information
+		});
+	}
+
+	populateRobotMenu();
+}
+
+
+void MapViewState::onRobotSelfDestruct(const Robot& robot, MapCoordinate position)
+{
 	mNotificationArea.push({
 		"Robot Self-Destructed",
 		robot.name() + " self destructed.",
@@ -216,9 +265,8 @@ void MapViewState::onRobotSelfDestruct(const Robot& robot)
 }
 
 
-void MapViewState::onRobotBreakDown(const Robot& robot)
+void MapViewState::onRobotBreakDown(const Robot& robot, MapCoordinate position)
 {
-	const auto& position = robot.mapCoordinate();
 	mNotificationArea.push({
 		"Robot Broke Down",
 		robot.name() + " has broken down. It will not be able to complete its task and will be removed from your inventory.",
@@ -228,9 +276,8 @@ void MapViewState::onRobotBreakDown(const Robot& robot)
 }
 
 
-void MapViewState::onRobotTaskComplete(const Robot& robot)
+void MapViewState::onRobotTaskComplete(const Robot& robot, MapCoordinate position)
 {
-	const auto& position = robot.mapCoordinate();
 	mNotificationArea.push({
 		"Robot Task Completed",
 		robot.name() + " completed its task.",
@@ -240,9 +287,8 @@ void MapViewState::onRobotTaskComplete(const Robot& robot)
 }
 
 
-void MapViewState::onRobotTaskCancel(const Robot& robot)
+void MapViewState::onRobotTaskCancel(const Robot& robot, MapCoordinate position)
 {
-	const auto& position = robot.mapCoordinate();
 	mNotificationArea.push({
 		"Robot Task Canceled",
 		robot.name() + " canceled its task.",
