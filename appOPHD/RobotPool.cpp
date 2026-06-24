@@ -281,6 +281,24 @@ void RobotPool::deployDozer(Tile& tile)
 }
 
 
+void RobotPool::restoreDeployed(Robot& robot, Tile& tile, int turns)
+{
+	if (mRobotControlMax > 0 && mRobotControlCount >= mRobotControlMax)
+	{
+		throw std::runtime_error("Must increase robot command capacity before placing more robots: " + std::to_string(mRobotControlCount) + " / " + std::to_string(mRobotControlMax));
+	}
+
+	auto it = std::find(mDeployedRobots.begin(), mDeployedRobots.end(), &robot);
+	if (it != mDeployedRobots.end()) { throw std::runtime_error("RobotPool::restoreDeployed(): Attempting to add a duplicate Robot* pointer."); }
+
+	mDeployedRobots.push_back(&robot);
+	robot.startTask(tile, turns);
+	tile.mapObject(&robot);
+
+	++mRobotControlCount;
+}
+
+
 void RobotPool::deployMiner(Tile& tile)
 {
 	auto& robot = getMiner();

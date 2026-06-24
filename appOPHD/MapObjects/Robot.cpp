@@ -63,6 +63,19 @@ void Robot::sanitizeTaskTurns()
 }
 
 
+void Robot::detachFromTile()
+{
+	if (!mTile) { return; }
+
+	if (mTile->mapObject() == this)
+	{
+		mTile->removeMapObject();
+	}
+
+	mTile = nullptr;
+}
+
+
 const RobotType& Robot::robotType(RobotTypeIndex robotTypeIndex)
 {
 	return robotTypes.at(static_cast<std::size_t>(robotTypeIndex));
@@ -190,15 +203,21 @@ void Robot::processTurn(TileMap& tileMap, StructureManager& structureManager)
 	if (mCancelTask)
 	{
 		mTurnsToCompleteTask = 0;
+		detachFromTile();
 		return;
 	}
 
-	mTurnsToCompleteTask--;
-
-	if (mTurnsToCompleteTask == 0)
+	if (mTurnsToCompleteTask > 0)
 	{
+		--mTurnsToCompleteTask;
+	}
+
+	if (mTurnsToCompleteTask <= 0)
+	{
+		mTurnsToCompleteTask = 0;
 		onTaskComplete(tileMap, structureManager);
 		if (mTaskCompleteHandler) { mTaskCompleteHandler(*this); }
+		detachFromTile();
 	}
 
 	mFuelCellAge++;

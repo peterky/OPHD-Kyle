@@ -47,6 +47,7 @@ public:
 	bool isPlaced() const;
 	bool hasAssignedTile() const { return mTile != nullptr; }
 	void sanitizeTaskTurns();
+	void detachFromTile();
 	Tile& tile();
 	const Tile& tile() const;
 	MapCoordinate mapCoordinate() const;

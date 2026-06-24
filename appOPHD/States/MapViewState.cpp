@@ -1503,16 +1503,49 @@ void MapViewState::insertSeedLander(NAS2D::Point<int> point)
 }
 
 
+void MapViewState::reconcileDeployedRobots()
+{
+	std::vector<Robot*> busyRobotsOnMap;
+
+	for (int depth = 0; depth <= mTileMap->maxDepth(); ++depth)
+	{
+		for (const auto point : NAS2D::PointInRectangleRange{mTileMap->area()})
+		{
+			auto& tile = mTileMap->getTile({point, depth});
+			auto* robot = tile.robot();
+			if (!robot) { continue; }
+
+			if (robot->idle() || robot->isDead())
+			{
+				tile.removeMapObject();
+				robot->detachFromTile();
+				continue;
+			}
+
+			busyRobotsOnMap.push_back(robot);
+		}
+	}
+
+	for (auto* robot : busyRobotsOnMap)
+	{
+		if (std::find(mDeployedRobots.begin(), mDeployedRobots.end(), robot) == mDeployedRobots.end())
+		{
+			mDeployedRobots.push_back(robot);
+		}
+	}
+}
+
+
 void MapViewState::updateRobots()
 {
+	reconcileDeployedRobots();
+
 	for (auto* robotPointer : mDeployedRobots)
 	{
 		auto& robot = *robotPointer;
 		robot.sanitizeTaskTurns();
 
 		if (!robot.hasAssignedTile()) { continue; }
-
-		auto& tile = robot.tile();
 
 		robot.processTurn(*mTileMap, mStructureManager);
 
@@ -1528,10 +1561,7 @@ void MapViewState::updateRobots()
 				robot.abortTask();
 			}
 
-			if (tile.mapObject() == &robot)
-			{
-				tile.removeMapObject();
-			}
+			robot.detachFromTile();
 
 			if (mRobotInspector.focusedRobot() == &robot) { mRobotInspector.hide(); }
 
@@ -1539,10 +1569,7 @@ void MapViewState::updateRobots()
 		}
 		else if (robot.idle())
 		{
-			if (tile.mapObject() == &robot)
-			{
-				tile.removeMapObject();
-			}
+			robot.detachFromTile();
 
 			if (robot.taskCanceled())
 			{

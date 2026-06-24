@@ -13,9 +13,7 @@
 #include "../UI/FactoryProduction.h"
 #include "../UI/GameOverDialog.h"
 #include "../GameSettings.h"
-#include "../GameSettings.h"
 #include "../UI/GameOptionsDialog.h"
-#include "../UI/KeyBindingsDialog.h"
 #include "../UI/KeyBindingsDialog.h"
 #include "../UI/IconGrid.h"
 #include "../UI/MajorEventAnnouncement.h"
@@ -29,7 +27,13 @@
 #include "../UI/WarehouseInspector.h"
 #include "../UI/ResourceInfoBar.h"
 #include "../UI/RobotDeploymentSummary.h"
+#include "../UI/MaintenanceTurnSummary.h"
+#include "../UI/SkipTurnsDialog.h"
+
+#include "../ColonyMaintenanceStats.h"
 #include "../UI/CheatMenu.h"
+
+#include "../ColonyProductionHistory.h"
 
 #include <libOPHD/PlanetAttributes.h>
 #include <libOPHD/StorableResources.h>
@@ -92,7 +96,7 @@ public:
 	using EventDelegate = NAS2D::Delegate<void()>;
 
 public:
-	MapViewState(GameState& gameState, SavedGameFile& saveGameFile, EventDelegate quitHandler);
+	MapViewState(GameState& gameState, SavedGameFile& saveGameFile, const std::string& sessionName, EventDelegate quitHandler);
 	MapViewState(GameState& gameState, const PlanetAttributes& planetAttributes, Difficulty selectedDifficulty, EventDelegate quitHandler);
 	~MapViewState() override;
 
@@ -108,7 +112,10 @@ public:
 	void initialize() override;
 	State* update() override;
 
-	void save(SavedGameFile&);
+	void save(SavedGameFile&, bool showOverlay = true);
+
+	/** Dismisses the topmost popup, or opens the system menu when nothing else is open. Bound to Esc. */
+	void handleEscapeKey();
 
 private:
 	void onDeactivate() override;
@@ -117,6 +124,7 @@ private:
 	// EVENT HANDLERS
 	void onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool repeat);
 	void onMouseDown(NAS2D::MouseButton button, NAS2D::Point<int> position);
+	void onMouseWheel(NAS2D::Vector<int> scrollAmount);
 	void onMouseDoubleClick(NAS2D::MouseButton button, NAS2D::Point<int> position);
 	void onWindowResized(NAS2D::Vector<int> newSize);
 
@@ -133,6 +141,7 @@ private:
 	void onDozerTaskComplete(Robot& robot);
 	void onDiggerTaskComplete(Robot& robot);
 	void onMinerTaskComplete(Robot& robot);
+	void onExplorerTaskComplete(Robot& robot);
 
 	void onRobotSelfDestruct(const Robot& robot);
 	void onRobotBreakDown(const Robot& robot);
@@ -156,7 +165,7 @@ private:
 	void placeTubes(Tile& tile);
 	void placeStructure(Tile& tile, StructureID structureID);
 	void placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex);
-	void placeRobotAtCursor();
+	void placeAtCursor();
 	void armRobot(RobotTypeIndex robotTypeIndex);
 
 	void placeRobodozer(Tile&);
@@ -173,6 +182,7 @@ private:
 	void updateCommRangeOverlay();
 	void updatePoliceOverlay();
 	void updateConnectedness();
+	void markTopologyDirty();
 	void changeViewDepth(int);
 	void moveView(MapOffset offset);
 	void onChangeDepth(int oldDepth, int newDepth);
@@ -194,7 +204,12 @@ private:
 	void onColonyShipCrash(const ColonyShipLanders&);
 	void checkWarehouseCapacity();
 	void nextTurn();
+	void skipTurns(int count);
+	void recordProductionHistory();
+	void tryAutoSave();
+	void logTurnDiagnostics();
 	void updatePopulation();
+	int consumeMedicine(int medicalCenters);
 	void updateCommercial();
 	void updateMaintenance();
 	void updateMorale();
@@ -203,6 +218,7 @@ private:
 	void updateBiowasteRecycling();
 	void updateResources();
 	void updateRoads();
+	void reconcileDeployedRobots();
 	void updateRobots();
 
 	void transportResourcesToStorage();
@@ -255,6 +271,7 @@ private:
 	void onOpenLoadGameDialog();
 	void onReturnToGame();
 	void onGameOver();
+	void onQuitGame();
 
 	void onMapObjectSelectionChanged();
 	void onDiggerSelectionDialog(Direction direction, Tile& tile);
@@ -280,6 +297,7 @@ private:
 
 	// MISCELLANEOUS
 	int mTurnCount = 0;
+	std::string mSessionName;
 
 	int mTurnNumberOfLanding; /**< First turn that human colonists landed. */
 
@@ -323,6 +341,17 @@ private:
 	// Bare Control's use for ToolTips
 	Control mTooltipSystemButton;
 	Control mTooltipCurrentTurns;
+	Control mTooltipMaintenanceDone;
+	Control mTooltipMaintenanceCrew;
+	Control mTooltipMaintenanceParts;
+	Control mTooltipRobotCommand;
+	Control mTooltipRobotDigger;
+	Control mTooltipRobotDozer;
+	Control mTooltipRobotMiner;
+	Control mTooltipRobotExplorer;
+	Control mTooltipRobotTrucks;
+
+	void updateLeftSummaryLayout();
 
 	ToolTip mToolTip;
 
@@ -361,10 +390,17 @@ private:
 	std::string mResearchStatusText;
 
 	ResourceInfoBar mResourceInfoBar;
+	MaintenanceTurnSummary mMaintenanceTurnSummary;
 	RobotDeploymentSummary mRobotDeploymentSummary;
+	ColonyMaintenanceTurnStats mMaintenanceTurnStats;
+	SkipTurnsDialog mSkipTurnsDialog;
+	ColonyProductionHistory mProductionHistory;
 	std::unique_ptr<MiniMap> mMiniMap;
 	std::unique_ptr<DetailMap> mDetailMap;
 	std::unique_ptr<NavControl> mNavControl;
 
 	NAS2D::Fade mFade;
+
+	bool mConnectednessDirty{true};
+	bool mRoutesDirty{true};
 };

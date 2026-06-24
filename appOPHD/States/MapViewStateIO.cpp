@@ -326,6 +326,7 @@ void MapViewState::load(SavedGameFile& savedGameFile)
 
 	readRobots(root->firstChildElement("robots"));
 	readStructures(root->firstChildElement("structures"));
+	reconcileDeployedRobots();
 	updateAllTubeConnectorDir();
 
 	mResearchTracker = readResearch(root->firstChildElement("research"), mTechnologyReader);
@@ -422,9 +423,14 @@ void MapViewState::readRobots(NAS2D::Xml::XmlElement* element)
 		if (productionTime > 0)
 		{
 			auto& tile = mTileMap->getTile({{x, y}, depth});
-			mRobotPool.deploy(robot, tile);
-			robot.startTask(tile, Robot::clampTaskTurns(robotTypeIndex, productionTime));
-			tile.bulldoze();
+			const auto clampedTurns = Robot::clampTaskTurns(robotTypeIndex, productionTime);
+			mRobotPool.restoreDeployed(robot, tile, clampedTurns);
+
+			if (robotTypeIndex == RobotTypeIndex::Dozer || robotTypeIndex == RobotTypeIndex::Digger)
+			{
+				tile.bulldoze();
+			}
+
 			if (robotTypeIndex == RobotTypeIndex::Digger)
 			{
 				tile.excavate();

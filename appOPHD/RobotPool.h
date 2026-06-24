@@ -64,6 +64,7 @@ public:
 
 	void deployDigger(Tile& tile, Direction direction);
 	void deployDozer(Tile& tile);
+	void restoreDeployed(Robot& robot, Tile& tile, int turns);
 	void deployMiner(Tile& tile);
 	void deployExplorer(Tile& tile);
 
@@ -71,6 +72,7 @@ public:
 	std::size_t currentControlCount() const { return mRobotControlCount; }
 
 	const RobotList& robots() const { return mRobots; }
+	const RobotList& deployedRobots() const { return mDeployedRobots; }
 	RobotList& deployedRobots() { return mDeployedRobots; }
 
 	NAS2D::Xml::XmlElement* writeRobots();
