@@ -3,6 +3,8 @@
 // ==================================================================================
 
 #include "MapViewState.h"
+
+#include "../ColonyDiagnostics.h"
 #include "MapViewStateHelper.h"
 #include "ColonyShip.h"
 
@@ -10,13 +12,12 @@
 #include "../Map/OreHaulRoutes.h"
 #include "../Map/Route.h"
 #include "../Map/RouteFinder.h"
+#include "../Map/MapView.h"
 #include "../Map/TileMap.h"
 
 #include "../MapObjects/StructureState.h"
 #include "../MapObjects/Structures/CommandCenter.h"
 #include "../MapObjects/Structures/Factory.h"
-#include <libOPHD/EnumProductType.h>
-#include <libOPHD/Technology/Technology.h>
 #include <libOPHD/EnumProductType.h>
 #include <libOPHD/Technology/Technology.h>
 #include "../MapObjects/Structures/MineFacility.h"
@@ -26,6 +27,12 @@
 #include "../MapObjects/Structures/Residence.h"
 #include "../MapObjects/Structures/Road.h"
 #include "../MapObjects/Structures/Warehouse.h"
+#include "../MapObjects/RobotTypeIndex.h"
+
+#include "../ColonyProductionHistory.h"
+#include "../ColonyMaintenanceStats.h"
+#include "../MaintenancePriority.h"
+#include "../TruckAvailability.h"
 
 #include "../CacheImage.h"
 #include "../MoraleString.h"
@@ -160,6 +167,33 @@ namespace
 }
 
 
+int MapViewState::consumeMedicine(int medicalCenters)
+{
+	if (medicalCenters <= 0) { return 0; }
+
+	int remaining = medicalCenters;
+	int consumed = 0;
+
+	for (auto* warehouse : mStructureManager.getStructures<Warehouse>())
+	{
+		if (!warehouse->operational()) { continue; }
+
+		auto& productPool = warehouse->products();
+		const int available = productPool.count(ProductType::PRODUCT_MEDICINE);
+		const int toPull = std::min(remaining, available);
+		if (toPull <= 0) { continue; }
+
+		productPool.pull(ProductType::PRODUCT_MEDICINE, toPull);
+		consumed += toPull;
+		remaining -= toPull;
+
+		if (remaining <= 0) { break; }
+	}
+
+	return consumed;
+}
+
+
 void MapViewState::updatePopulation()
 {
 	int residences = mStructureManager.operationalCount(StructureClass::Residence);
@@ -168,10 +202,11 @@ void MapViewState::updatePopulation()
 	int hospitals = mStructureManager.operationalCount(StructureClass::MedicalCenter);
 
 	auto foodProducers = mStructureManager.getStructures<FoodProduction>();
-	const auto& commandCenters = mStructureManager.getStructures<CommandCenter>();
-	foodProducers.insert(foodProducers.end(), commandCenters.begin(), commandCenters.end());
 
 	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	const int medicineConsumed = consumeMedicine(hospitals);
+	const float medicineMortalityBonus = medicineConsumed * 0.05f;
+
 	int amountToConsume = mPopulationModel.update(
 		mMorale.currentMorale(),
 		mFood,
@@ -180,7 +215,7 @@ void MapViewState::updatePopulation()
 		nurseries,
 		hospitals,
 		researchEffects.populationFertilityBonus,
-		researchEffects.populationMortalityReduction,
+		researchEffects.populationMortalityReduction + medicineMortalityBonus,
 		researchEffects.educationEfficiency);
 	consumeFood(foodProducers, amountToConsume);
 }
@@ -283,6 +318,12 @@ void MapViewState::updateMorale()
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::Deaths), -deathCount});
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::ResidentialOverflow), -residentialOverCapacityHit});
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::BiowasteOverflow), -bioWasteAccumulation * 2}); // TODO 2 is a magic number
+
+	const int retrained = mPopulationModel.lastRetrainedCount();
+	if (retrained > 0)
+	{
+		mMorale.journalMoraleChange({"Workforce Retraining", -((retrained + 4) / 5)});
+	}
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::StructuresDisabled), -structuresDisabled});
 	mMorale.journalMoraleChange({moraleString(MoraleIndexs::StructuresDestroyed), -structuresDestroyed});
 	mMorale.journalMoraleChange({"Food Production Issues", -foodProductionHit});
@@ -347,7 +388,11 @@ void MapViewState::transportResourcesToStorage()
 
 void MapViewState::updateResources()
 {
-	mOreHaulRoutes->updateRoutes();
+	if (mRoutesDirty)
+	{
+		mOreHaulRoutes->updateRoutes();
+		mRoutesDirty = false;
+	}
 	mOreHaulRoutes->transportOreFromMines();
 	transportResourcesToStorage();
 	updatePlayerResources();
@@ -435,8 +480,44 @@ void MapViewState::updateResidentialCapacity()
 void MapViewState::updateBiowasteRecycling()
 {
 	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
-	int bioWasteProcessingCapacity = researchEffects.adjustedBioWasteProcessing(mStructureManager.totalBioWasteProcessingCapacity());
-	if (bioWasteProcessingCapacity <= 0) { return; }
+
+	mMaintenanceTurnStats.wasteGenerated = 0;
+	mMaintenanceTurnStats.residencesOverflowing = 0;
+	mMaintenanceTurnStats.recyclingPlantsOperational = 0;
+	mMaintenanceTurnStats.recyclingPlantsTotal = 0;
+
+	for (const auto* residence : mStructureManager.getStructures<Residence>())
+	{
+		if (residence->operational())
+		{
+			mMaintenanceTurnStats.wasteGenerated += residence->assignedColonists();
+		}
+
+		if (residence->wasteOverflow() > 0)
+		{
+			++mMaintenanceTurnStats.residencesOverflowing;
+		}
+	}
+
+	for (const auto* structure : mStructureManager.allStructures())
+	{
+		if (structure->structureId() != StructureID::Recycling || structure->destroyed()) { continue; }
+
+		++mMaintenanceTurnStats.recyclingPlantsTotal;
+		if (structure->operational())
+		{
+			++mMaintenanceTurnStats.recyclingPlantsOperational;
+		}
+	}
+
+	mMaintenanceTurnStats.wasteProcessing = researchEffects.adjustedBioWasteProcessing(mStructureManager.totalBioWasteProcessingCapacity());
+
+	int bioWasteProcessingCapacity = mMaintenanceTurnStats.wasteProcessing;
+	if (bioWasteProcessingCapacity <= 0)
+	{
+		mMaintenanceTurnSummary.setStats(mMaintenanceTurnStats);
+		return;
+	}
 
 	// Process overflow first, prioritizing structures with minimal overflow
 	auto residences = mStructureManager.getStructures<Residence>();
@@ -446,7 +527,7 @@ void MapViewState::updateBiowasteRecycling()
 		const auto amountToProcess = std::min(bioWasteProcessingCapacity, residence->wasteOverflow());
 		const auto processedWaste = residence->removeWaste(amountToProcess);
 		bioWasteProcessingCapacity -= processedWaste;
-		if (bioWasteProcessingCapacity <= 0) { return; }
+		if (bioWasteProcessingCapacity <= 0) { break; }
 	}
 
 	// Process base amounts
@@ -454,8 +535,19 @@ void MapViewState::updateBiowasteRecycling()
 	{
 		const auto processedWaste = residence->removeWaste(bioWasteProcessingCapacity);
 		bioWasteProcessingCapacity -= processedWaste;
-		if (bioWasteProcessingCapacity <= 0) { return; }
+		if (bioWasteProcessingCapacity <= 0) { break; }
 	}
+
+	mMaintenanceTurnStats.residencesOverflowing = 0;
+	for (const auto* residence : mStructureManager.getStructures<Residence>())
+	{
+		if (residence->wasteOverflow() > 0)
+		{
+			++mMaintenanceTurnStats.residencesOverflowing;
+		}
+	}
+
+	mMaintenanceTurnSummary.setStats(mMaintenanceTurnStats);
 }
 
 
@@ -463,10 +555,7 @@ void MapViewState::updateFood()
 {
 	mFood = 0;
 
-	auto foodProducers = mStructureManager.getStructures<FoodProduction>();
-	const auto& command = mStructureManager.getStructures<CommandCenter>();
-
-	foodProducers.insert(foodProducers.begin(), command.begin(), command.end());
+	const auto& foodProducers = mStructureManager.getStructures<FoodProduction>();
 
 	for (const auto* foodProdcer : foodProducers)
 	{
@@ -493,6 +582,12 @@ void MapViewState::transferFoodToCommandCenter()
 		while (foodProducerIterator != foodProducers.end())
 		{
 			auto foodProducer = dynamic_cast<FoodProduction*>(*foodProducerIterator);
+			if (dynamic_cast<CommandCenter*>(foodProducer) != nullptr)
+			{
+				++foodProducerIterator;
+				continue;
+			}
+
 			const int foodMoved = std::clamp(foodToMove, 0, foodProducer->foodLevel());
 			foodProducer->foodLevel(foodProducer->foodLevel() - foodMoved);
 			commandCenter->foodLevel(commandCenter->foodLevel() + foodMoved);
@@ -523,23 +618,29 @@ void MapViewState::updateRoads()
 
 void MapViewState::checkAgingStructures()
 {
-	const auto& structures = mStructureManager.agingStructures();
-
-	for (const auto* structure : structures)
+	for (auto* structure : mStructureManager.allStructures())
 	{
-		if (structure->age() == structure->maxAge() - 10)
+		if (structure->destroyed() || structure->underConstruction()) { continue; }
+
+		const auto integrity = structure->integrity();
+		if (structure->isRoad() && (integrity == 80 || integrity == 35 || integrity == 20))
+		{
+			mRoutesDirty = true;
+		}
+
+		if (integrity == MaintenanceHighPriorityIntegrityThreshold)
 		{
 			mNotificationArea.push({
-				"Aging Structure",
-				structure->name() + " is getting old. You should replace it soon.",
+				"Structure Degrading",
+				structure->name() + " is heavily degraded. Maintenance is now high priority.",
 				structure->xyz(),
 				NotificationArea::NotificationType::Warning});
 		}
-		else if (structure->age() == structure->maxAge() - 5)
+		else if (integrity == 20)
 		{
 			mNotificationArea.push({
-				"Aging Structure",
-				structure->name() + " is about to collapse. You should replace it right away or consider demolishing it.",
+				"Structure Degrading",
+				structure->name() + " is critically degraded. Repair it immediately or risk collapse.",
 				structure->xyz(),
 				NotificationArea::NotificationType::Critical});
 		}
@@ -564,32 +665,79 @@ void MapViewState::checkNewlyBuiltStructures()
 
 void MapViewState::updateMaintenance()
 {
-	auto sortLambda = [](const Structure* lhs, const Structure* rhs) -> bool
+	mMaintenanceTurnStats = {};
+
+	for (auto* structure : mStructureManager.allStructures())
 	{
-		return lhs->integrity() < rhs->integrity();
-	};
+		if (structureNeedsMaintenance(*structure))
+		{
+			++mMaintenanceTurnStats.required;
+		}
+	}
 
 	auto structures = mStructureManager.allStructures();
+	const auto sortLambda = [](const Structure* lhs, const Structure* rhs) -> bool
+	{
+		return maintenancePriorityScore(*lhs) > maintenancePriorityScore(*rhs);
+	};
 	std::sort(structures.begin(), structures.end(), sortLambda);
 
 	const auto& maintenanceFacilities = mStructureManager.getStructures<MaintenanceFacility>();
 	for (auto* maintenanceFacility : maintenanceFacilities)
 	{
+		maintenanceFacility->beginMaintenanceTurn();
 		maintenanceFacility->repairStructures(structures);
+
+		mMaintenanceTurnStats.repaired += maintenanceFacility->repairsThisTurn();
+		mMaintenanceTurnStats.personnelAssigned += maintenanceFacility->assignedPersonnelThisTurn();
+		mMaintenanceTurnStats.personnelCapacity += maintenanceFacility->maintenancePersonnel();
+		mMaintenanceTurnStats.suppliesOnHand += maintenanceFacility->materialsLevel();
+		mMaintenanceTurnStats.suppliesCapacity += maintenanceFacility->materialsCapacity();
 	}
+
+	for (auto* structure : mStructureManager.allStructures())
+	{
+		if (structureNeedsMaintenance(*structure))
+		{
+			++mMaintenanceTurnStats.pending;
+		}
+	}
+
+	mMaintenanceTurnSummary.setStats(mMaintenanceTurnStats);
 }
 
 
 void MapViewState::updateOverlays()
 {
-	updateRouteOverlay();
-	updateCommRangeOverlay();
-	updatePoliceOverlay();
+	const bool routeOverlay = mBtnToggleRouteOverlay.isPressed();
+	const bool connectednessOverlay = mBtnToggleConnectedness.isPressed();
+	const bool commOverlay = mBtnToggleCommRangeOverlay.isPressed();
+	const bool policeOverlay = mBtnTogglePoliceOverlay.isPressed();
 
-	if (mBtnToggleRouteOverlay.isPressed()) { onToggleRouteOverlay(); }
-	if (mBtnToggleConnectedness.isPressed()) { onToggleConnectedness(); }
-	if (mBtnToggleCommRangeOverlay.isPressed()) { onToggleCommRangeOverlay(); }
-	if (mBtnTogglePoliceOverlay.isPressed()) { onTogglePoliceOverlay(); }
+	if (!routeOverlay && !connectednessOverlay && !commOverlay && !policeOverlay) { return; }
+
+	clearOverlays();
+
+	if (routeOverlay)
+	{
+		updateRouteOverlay();
+		setOverlay(mTruckRouteOverlay, Tile::Overlay::TruckingRoutes);
+	}
+	else if (connectednessOverlay)
+	{
+		if (mConnectednessDirty) { updateConnectedness(); }
+		setOverlay(mConnectednessOverlay, Tile::Overlay::Connectedness);
+	}
+	else if (commOverlay)
+	{
+		updateCommRangeOverlay();
+		setOverlay(mCommRangeOverlay, Tile::Overlay::Communications);
+	}
+	else if (policeOverlay)
+	{
+		updatePoliceOverlay();
+		setOverlay(mPoliceOverlays[static_cast<std::size_t>(mMapView->currentDepth())], Tile::Overlay::Police);
+	}
 }
 
 
@@ -644,8 +792,9 @@ void MapViewState::updateResearch()
 
 	for (const auto& [techId, researchProgress] : inProgressResearch)
 	{
-		const auto& technology = mTechnologyReader.technologyFromId(techId);
-		const int basePointsThisTurn = (technology.labType == 0) ? regularResearchPoints : hotResearchPoints;
+		const auto* technology = mTechnologyReader.findTechnologyFromId(techId);
+		if (!technology) { continue; }
+		const int basePointsThisTurn = (technology->labType == 0) ? regularResearchPoints : hotResearchPoints;
 		const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
 		const int pointsThisTurn = researchEffects.adjustedResearchPoints(basePointsThisTurn);
 
@@ -653,29 +802,18 @@ void MapViewState::updateResearch()
 
 		const int updatedProgress = researchProgress.progress + pointsThisTurn;
 
-		if (updatedProgress >= technology.cost)
+		if (updatedProgress >= technology->cost)
 		{
 			mResearchTracker.completeResearch(techId);
 			completedThisTurn.push_back(techId);
 			mNotificationArea.push({
 				"Research Complete",
-				technology.name + " has been researched.",
+				technology->name + " has been researched.",
 				{{-1, -1}, 0},
 				NotificationArea::NotificationType::Success
 			});
 
-			for (const auto& unlock : technology.unlocks)
-			{
-				if (unlock.unlocks != Technology::Unlock::Unlocks::DisasterPrediction) { continue; }
-
-				mNotificationArea.push({
-					"Early Warning Online",
-					"Colony sensors can now provide advance warning for " + unlock.value + " events.",
-					{{-1, -1}, 0},
-					NotificationArea::NotificationType::Information});
-			}
-
-			for (const auto& unlock : technology.unlocks)
+			for (const auto& unlock : technology->unlocks)
 			{
 				if (unlock.unlocks != Technology::Unlock::Unlocks::DisasterPrediction) { continue; }
 
@@ -714,46 +852,29 @@ void MapViewState::updateResearch()
 		}
 	}
 
-	// get list of completed technologies
-	const auto& completedTechs = mResearchTracker.completedResearch();
-	std::vector<const Technology*> techList;
-	for (const auto techId : completedTechs)
+	if (!completedThisTurn.empty())
 	{
-		const auto* technology = mTechnologyReader.findTechnologyFromId(techId);
-		if (technology) { techList.push_back(technology); }
-	}
-
-	// get list of completed technologies that unlock buildings
-	std::vector<const Technology*> unlockedStructures;
-
-	for (auto tech : techList)
-	{
-		for (const auto& unlock : (*tech).unlocks)
+		for (const auto techId : completedThisTurn)
 		{
-			if (unlock.unlocks == Technology::Unlock::Unlocks::Structure)
-			{
-				unlockedStructures.push_back(tech);
-			}
-		}
-	}
+			const auto* technology = mTechnologyReader.findTechnologyFromId(techId);
+			if (!technology) { continue; }
 
-	for (const auto& tech : unlockedStructures)
-	{
-		for (const auto& unlock : tech->unlocks)
-		{
-			if (unlock.unlocks != Technology::Unlock::Unlocks::Structure) { continue; }
-
-			const auto structureIt = StructureIdFromString.find(unlock.value);
-			if (structureIt == StructureIdFromString.end()) { continue; }
-
-			const auto structureId = structureIt->second;
-			if (UndergroundStructures.find(structureId) != UndergroundStructures.end())
+			for (const auto& unlock : technology->unlocks)
 			{
-				mStructureTracker.addUnlockedUndergroundStructure(structureId);
-			}
-			else
-			{
-				mStructureTracker.addUnlockedSurfaceStructure(structureId);
+				if (unlock.unlocks != Technology::Unlock::Unlocks::Structure) { continue; }
+
+				const auto structureIt = StructureIdFromString.find(unlock.value);
+				if (structureIt == StructureIdFromString.end()) { continue; }
+
+				const auto structureId = structureIt->second;
+				if (UndergroundStructures.find(structureId) != UndergroundStructures.end())
+				{
+					mStructureTracker.addUnlockedUndergroundStructure(structureId);
+				}
+				else
+				{
+					mStructureTracker.addUnlockedSurfaceStructure(structureId);
+				}
 			}
 		}
 	}
@@ -779,7 +900,6 @@ void MapViewState::nextTurn()
 	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
 	const auto imageProcessingTurn = &getImage("sys/processing_turn.png");
 	renderer.drawImage(*imageProcessingTurn, renderer.center() - imageProcessingTurn->size() / 2);
-	renderer.update();
 
 	mNotificationWindow.hide();
 	mNotificationArea.clear();
@@ -793,7 +913,10 @@ void MapViewState::nextTurn()
 
 	mResourceBreakdownPanel.previousResources(mResourcesCount);
 
-	updateConnectedness();
+	if (mConnectednessDirty)
+	{
+		updateConnectedness();
+	}
 
 	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
 	mStructureManager.update(mResourcesCount, mPopulationPool, researchEffects);
@@ -840,6 +963,9 @@ void MapViewState::nextTurn()
 	for (auto* factory : factories)
 	{
 		factory->updateProduction();
+		// Factories check against mResourcesCount but deduct from warehouse storage;
+		// refresh the aggregate after each factory so later factories see depleted stock.
+		updatePlayerResources();
 	}
 
 	updateResearch();
@@ -868,5 +994,70 @@ void MapViewState::nextTurn()
 
 	mTurnCount++;
 
+	recordProductionHistory();
+	logTurnDiagnostics();
+	tryAutoSave();
+
 	mResourceInfoBar.ignoreGlow(false);
+}
+
+
+void MapViewState::recordProductionHistory()
+{
+	ColonyTurnSnapshot snapshot;
+	snapshot.turn = mTurnCount;
+	snapshot.refinedResources = mResourcesCount.resources;
+	snapshot.food = mFood;
+	snapshot.population = static_cast<int>(mPopulationModel.getPopulations().size());
+
+	const auto truckStats = getTruckDeploymentStats(mStructureManager);
+	snapshot.trucksAvailable = truckStats.available;
+	snapshot.trucksDeployed = truckStats.deployed;
+
+	snapshot.robotsAvailable = static_cast<int>(
+		mRobotPool.getAvailableCount(RobotTypeIndex::Digger) +
+		mRobotPool.getAvailableCount(RobotTypeIndex::Dozer) +
+		mRobotPool.getAvailableCount(RobotTypeIndex::Miner) +
+		mRobotPool.getAvailableCount(RobotTypeIndex::Explorer));
+	snapshot.robotsTotal = static_cast<int>(mRobotPool.robots().size());
+
+	mProductionHistory.recordTurn(snapshot);
+}
+
+
+void MapViewState::skipTurns(int count)
+{
+	for (int i = 0; i < count; ++i)
+	{
+		if (mGameOverDialog.visible()) { break; }
+		if (!mBtnTurns.enabled()) { break; }
+		nextTurn();
+	}
+}
+
+
+void MapViewState::logTurnDiagnostics()
+{
+	int queuedResearch{0};
+	for (const auto& [labType, queue] : mResearchTracker.researchQueue())
+	{
+		(void)labType;
+		queuedResearch += static_cast<int>(queue.size());
+	}
+
+	ColonyTurnLogInfo info;
+	info.turn = mTurnCount;
+	info.population = mPopulationModel.getPopulations().size();
+	info.structures = mStructureManager.count();
+	info.completedResearch = static_cast<int>(mResearchTracker.completedResearch().size());
+	info.activeResearch = static_cast<int>(mResearchTracker.currentResearch().size());
+	info.queuedResearch = queuedResearch;
+	info.resourcesTotal = mResourcesCount.total();
+	info.morale = mMorale.currentMorale();
+	info.food = mFood;
+	info.robotsDeployed = static_cast<int>(mRobotPool.deployedRobots().size());
+	info.dozersIdle = static_cast<int>(mRobotPool.getAvailableCount(RobotTypeIndex::Dozer));
+
+	ColonyDiagnostics::setTurnCount(mTurnCount);
+	ColonyDiagnostics::logTurn(info);
 }

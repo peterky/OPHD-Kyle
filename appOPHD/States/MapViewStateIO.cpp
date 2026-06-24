@@ -398,6 +398,7 @@ void MapViewState::load(SavedGameFile& savedGameFile)
 void MapViewState::readRobots(NAS2D::Xml::XmlElement* element)
 {
 	mRobotPool.clear();
+	int stuckDozersRepaired{0};
 
 	for (NAS2D::Xml::XmlElement* robotElement = element->firstChildElement(); robotElement; robotElement = robotElement->nextSiblingElement())
 	{
@@ -423,19 +424,30 @@ void MapViewState::readRobots(NAS2D::Xml::XmlElement* element)
 		if (productionTime > 0)
 		{
 			auto& tile = mTileMap->getTile({{x, y}, depth});
+
+			if (robotTypeIndex == RobotTypeIndex::Dozer)
+			{
+				++stuckDozersRepaired;
+				static_cast<Robodozer&>(robot).bulldozeTile(tile);
+				continue;
+			}
+
 			const auto clampedTurns = Robot::clampTaskTurns(robotTypeIndex, productionTime);
 			mRobotPool.restoreDeployed(robot, tile, clampedTurns);
-
-			if (robotTypeIndex == RobotTypeIndex::Dozer || robotTypeIndex == RobotTypeIndex::Digger)
-			{
-				tile.bulldoze();
-			}
+			tile.bulldoze();
 
 			if (robotTypeIndex == RobotTypeIndex::Digger)
 			{
 				tile.excavate();
 			}
 		}
+	}
+
+	mRobotPool.reclaimStuckDozers();
+
+	if (stuckDozersRepaired > 0)
+	{
+		ColonyDiagnostics::logEvent("Repaired " + std::to_string(stuckDozersRepaired) + " stuck dozers during save load");
 	}
 
 	populateRobotMenu();

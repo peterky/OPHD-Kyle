@@ -47,6 +47,7 @@ public:
 	bool isPlaced() const;
 	bool hasAssignedTile() const { return mTile != nullptr; }
 	void sanitizeTaskTurns();
+	void resetTaskState();
 	void detachFromTile();
 	Tile& tile();
 	const Tile& tile() const;

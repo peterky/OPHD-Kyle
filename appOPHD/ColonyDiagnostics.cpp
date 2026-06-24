@@ -1,0 +1,280 @@
+#include "ColonyDiagnostics.h"
+
+#include "Constants/Strings.h"
+
+#include <NAS2D/Filesystem.h>
+#include <NAS2D/Utility.h>
+
+#include <chrono>
+#include <cstdlib>
+#include <iomanip>
+#include <mutex>
+#include <sstream>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
+
+namespace
+{
+	const std::string LogsPath{"logs/"};
+	const std::string SessionLogFile{"logs/session.log"};
+	const std::string ReadmeFile{"logs/README.txt"};
+
+	std::mutex gLogMutex;
+	std::string gSessionName;
+	int gTurnCount{0};
+	bool gInitialized{false};
+	bool gSessionActive{false};
+
+#ifdef _WIN32
+	LPTOP_LEVEL_EXCEPTION_FILTER gPreviousExceptionFilter{nullptr};
+#endif
+
+
+	std::string currentTimestamp()
+	{
+		const auto now = std::chrono::system_clock::now();
+		const auto time = std::chrono::system_clock::to_time_t(now);
+		std::tm localTime{};
+#ifdef _WIN32
+		localtime_s(&localTime, &time);
+#else
+		localtime_r(&time, &localTime);
+#endif
+		std::ostringstream stream;
+		stream << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S");
+		return stream.str();
+	}
+
+
+	std::string crashTimestamp()
+	{
+		const auto now = std::chrono::system_clock::now();
+		const auto time = std::chrono::system_clock::to_time_t(now);
+		std::tm localTime{};
+#ifdef _WIN32
+		localtime_s(&localTime, &time);
+#else
+		localtime_r(&time, &localTime);
+#endif
+		std::ostringstream stream;
+		stream << std::put_time(&localTime, "%Y%m%d_%H%M%S");
+		return stream.str();
+	}
+
+
+	void appendToFile(const std::string& virtualPath, const std::string& line)
+	{
+		auto& filesystem = NAS2D::Utility<NAS2D::Filesystem>::get();
+		std::string existing;
+		if (filesystem.exists(NAS2D::VirtualPath{virtualPath}))
+		{
+			existing = filesystem.readFile(NAS2D::VirtualPath{virtualPath});
+		}
+		filesystem.writeFile(NAS2D::VirtualPath{virtualPath}, existing + line);
+	}
+
+
+	void writeSessionLine(const std::string& line)
+	{
+		std::lock_guard lock{gLogMutex};
+		appendToFile(SessionLogFile, "[" + currentTimestamp() + "] " + line + "\n");
+	}
+
+
+	void writeCrashReport(const std::string& reason, const std::string& details = {})
+	{
+		std::lock_guard lock{gLogMutex};
+
+		const auto crashPath = LogsPath + "crash_" + crashTimestamp() + ".log";
+		std::ostringstream report;
+		report << "OutpostHD " << constants::Version << " — Ungraceful shutdown\n";
+		report << "Timestamp: " << currentTimestamp() << "\n";
+		report << "Reason: " << reason << "\n";
+		report << "Session: " << (gSessionName.empty() ? "(none)" : gSessionName) << "\n";
+		report << "Last known turn: " << gTurnCount << "\n";
+		if (!details.empty())
+		{
+			report << "\nDetails:\n" << details << "\n";
+		}
+		report << "\nUpload the entire logs/ folder when reporting crashes.\n";
+
+		auto& filesystem = NAS2D::Utility<NAS2D::Filesystem>::get();
+		filesystem.writeFile(NAS2D::VirtualPath{crashPath}, report.str());
+
+		appendToFile(SessionLogFile, "[" + currentTimestamp() + "] CRASH: " + reason + " (see " + crashPath + ")\n");
+	}
+
+
+#ifdef _WIN32
+	std::string describeExceptionCode(DWORD code)
+	{
+		switch (code)
+		{
+		case EXCEPTION_ACCESS_VIOLATION: return "Access violation";
+		case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: return "Array bounds exceeded";
+		case EXCEPTION_BREAKPOINT: return "Breakpoint";
+		case EXCEPTION_DATATYPE_MISALIGNMENT: return "Datatype misalignment";
+		case EXCEPTION_FLT_DENORMAL_OPERAND: return "Float denormal operand";
+		case EXCEPTION_FLT_DIVIDE_BY_ZERO: return "Float divide by zero";
+		case EXCEPTION_FLT_INEXACT_RESULT: return "Float inexact result";
+		case EXCEPTION_FLT_INVALID_OPERATION: return "Float invalid operation";
+		case EXCEPTION_FLT_OVERFLOW: return "Float overflow";
+		case EXCEPTION_FLT_STACK_CHECK: return "Float stack check";
+		case EXCEPTION_FLT_UNDERFLOW: return "Float underflow";
+		case EXCEPTION_ILLEGAL_INSTRUCTION: return "Illegal instruction";
+		case EXCEPTION_IN_PAGE_ERROR: return "In-page error";
+		case EXCEPTION_INT_DIVIDE_BY_ZERO: return "Integer divide by zero";
+		case EXCEPTION_INT_OVERFLOW: return "Integer overflow";
+		case EXCEPTION_INVALID_DISPOSITION: return "Invalid disposition";
+		case EXCEPTION_NONCONTINUABLE_EXCEPTION: return "Noncontinuable exception";
+		case EXCEPTION_PRIV_INSTRUCTION: return "Privileged instruction";
+		case EXCEPTION_SINGLE_STEP: return "Single step";
+		case EXCEPTION_STACK_OVERFLOW: return "Stack overflow";
+		default: return "Unknown exception (0x" + std::to_string(code) + ")";
+		}
+	}
+
+
+	LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS* exceptionInfo)
+	{
+		std::ostringstream details;
+		if (exceptionInfo && exceptionInfo->ExceptionRecord)
+		{
+			const auto* record = exceptionInfo->ExceptionRecord;
+			details << "Exception: " << describeExceptionCode(record->ExceptionCode) << "\n";
+			details << "Address: 0x" << std::hex << reinterpret_cast<std::uintptr_t>(record->ExceptionAddress) << std::dec << "\n";
+
+			if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2)
+			{
+				const auto operation = record->ExceptionInformation[0] == 0 ? "read" :
+					record->ExceptionInformation[0] == 1 ? "write" : "execute";
+				details << "Access: " << operation << " at 0x" << std::hex << record->ExceptionInformation[1] << std::dec << "\n";
+			}
+		}
+
+		writeCrashReport("Unhandled Windows exception", details.str());
+		if (gPreviousExceptionFilter) { return gPreviousExceptionFilter(exceptionInfo); }
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
+#endif
+
+
+	void onTerminate()
+	{
+		writeCrashReport("std::terminate() called");
+		std::abort();
+	}
+
+
+	void writeReadme()
+	{
+		const std::string readme =
+			"OutpostHD diagnostic logs\n"
+			"=========================\n\n"
+			"session.log  — Per-turn colony snapshot and notable events during play.\n"
+			"crash_*.log  — Written when the game exits ungracefully (crash, abort, etc.).\n\n"
+			"If the game crashes, zip this entire logs/ folder and send it to the developer.\n";
+
+		auto& filesystem = NAS2D::Utility<NAS2D::Filesystem>::get();
+		if (!filesystem.exists(NAS2D::VirtualPath{ReadmeFile}))
+		{
+			filesystem.writeFile(NAS2D::VirtualPath{ReadmeFile}, readme);
+		}
+	}
+}
+
+
+void ColonyDiagnostics::initialize()
+{
+	if (gInitialized) { return; }
+
+	auto& filesystem = NAS2D::Utility<NAS2D::Filesystem>::get();
+	filesystem.makeDirectory(NAS2D::VirtualPath{LogsPath});
+	writeReadme();
+
+#ifdef _WIN32
+	gPreviousExceptionFilter = SetUnhandledExceptionFilter(unhandledExceptionFilter);
+#endif
+	std::set_terminate(onTerminate);
+
+	gInitialized = true;
+	writeSessionLine("=== OutpostHD " + constants::Version + " started ===");
+}
+
+
+void ColonyDiagnostics::shutdown(bool cleanShutdown)
+{
+	if (!gInitialized) { return; }
+
+	if (cleanShutdown)
+	{
+		writeSessionLine("=== OutpostHD shut down cleanly ===");
+	}
+	else
+	{
+		writeCrashReport("Shutdown without clean flag");
+	}
+
+	gInitialized = false;
+}
+
+
+void ColonyDiagnostics::beginSession(const std::string& sessionName)
+{
+	gSessionName = sessionName;
+	gSessionActive = true;
+	gTurnCount = 0;
+	writeSessionLine("--- Session begin: " + sessionName + " ---");
+}
+
+
+void ColonyDiagnostics::endSession()
+{
+	if (!gSessionActive) { return; }
+	writeSessionLine("--- Session end: " + gSessionName + " (turn " + std::to_string(gTurnCount) + ") ---");
+	gSessionActive = false;
+	gSessionName.clear();
+}
+
+
+void ColonyDiagnostics::setTurnCount(int turn)
+{
+	gTurnCount = turn;
+}
+
+
+void ColonyDiagnostics::logTurn(const ColonyTurnLogInfo& info)
+{
+	gTurnCount = info.turn;
+
+	std::ostringstream line;
+	line << "turn=" << info.turn
+		<< " pop=" << info.population
+		<< " structures=" << info.structures
+		<< " research_completed=" << info.completedResearch
+		<< " research_active=" << info.activeResearch
+		<< " research_queued=" << info.queuedResearch
+		<< " resources=" << info.resourcesTotal
+		<< " morale=" << info.morale
+		<< " food=" << info.food
+		<< " robots_deployed=" << info.robotsDeployed
+		<< " dozers_idle=" << info.dozersIdle;
+
+	writeSessionLine(line.str());
+}
+
+
+void ColonyDiagnostics::logEvent(const std::string& message)
+{
+	writeSessionLine("event: " + message);
+}
+
+
+void ColonyDiagnostics::notifyAutoSave(int turn, const std::string& savePath)
+{
+	writeSessionLine("autosave turn=" + std::to_string(turn) + " path=" + savePath);
+}

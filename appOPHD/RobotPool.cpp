@@ -277,12 +277,35 @@ void RobotPool::deployDigger(Tile& tile, Direction direction)
 void RobotPool::deployDozer(Tile& tile)
 {
 	auto& robot = getDozer();
-	deploy(robot, tile);
+	static_cast<Robodozer&>(robot).bulldozeTile(tile);
+}
+
+
+void RobotPool::reclaimStuckDozers()
+{
+	for (auto& dozer : mDozers)
+	{
+		if (dozer.turnsToCompleteTask() <= 0) { continue; }
+
+		dozer.detachFromTile();
+		dozer.resetTaskState();
+	}
+
+	std::erase_if(mDeployedRobots, [](const Robot* robot) { return robot->type() == RobotTypeIndex::Dozer; });
+
+	mRobotControlCount = robotControlCount(mDiggers) + robotControlCount(mDozers)
+		+ robotControlCount(mMiners) + robotControlCount(mExplorers);
 }
 
 
 void RobotPool::restoreDeployed(Robot& robot, Tile& tile, int turns)
 {
+	if (robot.type() == RobotTypeIndex::Dozer)
+	{
+		static_cast<Robodozer&>(robot).bulldozeTile(tile);
+		return;
+	}
+
 	if (mRobotControlMax > 0 && mRobotControlCount >= mRobotControlMax)
 	{
 		throw std::runtime_error("Must increase robot command capacity before placing more robots: " + std::to_string(mRobotControlCount) + " / " + std::to_string(mRobotControlMax));

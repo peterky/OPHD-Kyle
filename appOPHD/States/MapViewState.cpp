@@ -1158,9 +1158,28 @@ void MapViewState::placeRobot(Tile& tile, RobotTypeIndex robotTypeIndex)
 
 void MapViewState::placeRobodozer(Tile& tile)
 {
+	mRobotPool.reclaimStuckDozers();
+
+	if (!mRobotPool.robotAvailable(RobotTypeIndex::Dozer))
+	{
+		doAlertMessage(constants::AlertInvalidRobotPlacement, "No idle Robodozers are available. Stuck dozers were cleared — try again.");
+		populateRobotMenu();
+		return;
+	}
+
 	if (tile.mapObject() && !tile.hasStructure())
 	{
-		return;
+		if (auto* robot = tile.robot())
+		{
+			tile.removeMapObject();
+			robot->resetTaskState();
+			robot->detachFromTile();
+			std::erase(mDeployedRobots, robot);
+		}
+		else
+		{
+			return;
+		}
 	}
 	else if (tile.isBulldozed() && !tile.hasStructure())
 	{
@@ -1515,6 +1534,13 @@ void MapViewState::reconcileDeployedRobots()
 			auto* robot = tile.robot();
 			if (!robot) { continue; }
 
+			if (robot->type() == RobotTypeIndex::Dozer)
+			{
+				tile.removeMapObject();
+				static_cast<Robodozer&>(*robot).bulldozeTile(tile);
+				continue;
+			}
+
 			if (robot->idle() || robot->isDead())
 			{
 				tile.removeMapObject();
@@ -1538,6 +1564,7 @@ void MapViewState::reconcileDeployedRobots()
 
 void MapViewState::updateRobots()
 {
+	mRobotPool.reclaimStuckDozers();
 	reconcileDeployedRobots();
 
 	for (auto* robotPointer : mDeployedRobots)

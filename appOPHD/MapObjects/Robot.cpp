@@ -56,10 +56,34 @@ int Robot::clampTaskTurns(RobotTypeIndex robotTypeIndex, int turns)
 
 void Robot::sanitizeTaskTurns()
 {
-	if (mTurnsToCompleteTask > 0)
+	if (mRobotTypeIndex == RobotTypeIndex::Dozer)
 	{
-		mTurnsToCompleteTask = clampTaskTurns(mRobotTypeIndex, mTurnsToCompleteTask);
+		if (mTurnsToCompleteTask > 0)
+		{
+			mTurnsToCompleteTask = 0;
+			detachFromTile();
+		}
+		return;
 	}
+
+	if (mTurnsToCompleteTask <= 0) { return; }
+
+	const auto maxTurns = maxTaskTurns(mRobotTypeIndex);
+	if (mTurnsToCompleteTask > maxTurns)
+	{
+		mTurnsToCompleteTask = 1;
+		return;
+	}
+
+	mTurnsToCompleteTask = clampTaskTurns(mRobotTypeIndex, mTurnsToCompleteTask);
+}
+
+
+void Robot::resetTaskState()
+{
+	mTurnsToCompleteTask = 0;
+	mTile = nullptr;
+	mCancelTask = false;
 }
 
 

@@ -10,11 +10,17 @@ Robodozer::Robodozer() :
 }
 
 
-void Robodozer::startTask(Tile& tile)
+void Robodozer::bulldozeTile(Tile& tile)
 {
 	mTileIndex = static_cast<std::size_t>(tile.index());
-	Robot::startTask(tile, 1);
 	tile.bulldoze();
+	resetTaskState();
+}
+
+
+void Robodozer::startTask(Tile& tile)
+{
+	bulldozeTile(tile);
 }
 
 

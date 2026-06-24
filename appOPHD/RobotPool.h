@@ -65,6 +65,7 @@ public:
 	void deployDigger(Tile& tile, Direction direction);
 	void deployDozer(Tile& tile);
 	void restoreDeployed(Robot& robot, Tile& tile, int turns);
+	void reclaimStuckDozers();
 	void deployMiner(Tile& tile);
 	void deployExplorer(Tile& tile);
 
