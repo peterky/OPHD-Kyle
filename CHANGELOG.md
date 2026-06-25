@@ -1,5 +1,8 @@
 # Change Log
-This is the changelog for OutpostHD.
+
+This changelog documents the **upstream** [OutpostHD](https://github.com/OutpostUniverse/OPHD) project maintained by the Outpost Universe team.
+
+For changes specific to **Outpost HD: Kyle's Colony** (this fork), see [FORK_CHANGELOG.md](FORK_CHANGELOG.md).
 
 ## [0.8.10] - 2026-06-01
 

@@ -1,6 +1,8 @@
 # OutpostHD Player Guide
 
-A brief guide to playing OutpostHD.
+A brief guide to playing OutpostHD — the base game by the [Outpost Universe](https://github.com/OutpostUniverse/OPHD) team.
+
+> **Fork note:** If you are playing **Outpost HD: Kyle's Colony**, see the [README](README.md) and [FORK_CHANGELOG.md](FORK_CHANGELOG.md) for fork-specific features (workforce reports, explorer changes, robodozer behavior, etc.). This guide describes general OutpostHD gameplay.
 
 ## Starting Out
 

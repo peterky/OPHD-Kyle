@@ -1,97 +1,88 @@
-# OutpostHD Readme
-OutpostHD is a reimplementation of OUTPOST published by Sierra On-Line in 1994. It is not a clone. It's a complete redesign of OUTPOST taking the core concepts and reimplementing them in a much more fun and more responsive game.
+# Outpost HD: Kyle's Colony
 
-For up to the minute information, please visit [The Outpost Universe's Forums](http://forum.outpost2.net). You may also view [OutpostHD's Forum Thread](http://forum.outpost2.net/index.php/topic,5718.0.html) for additional details or to participate in the discussion.
+An unofficial personal fork of [OutpostHD](https://github.com/OutpostUniverse/OPHD), based on upstream **v0.8.10**. This repo contains Kyle's gameplay tweaks, UI polish, robodozer fixes, and colony-management additions.
 
-## Playing
+**This is not an official [Outpost Universe](http://forum.outpost2.net) release.** For the original project, its maintainers, and official builds, see [OutpostUniverse/OPHD](https://github.com/OutpostUniverse/OPHD).
 
-OutpostHD is still a work in progress with lots of active development, so things may still be a bit rough and incomplete (not entirely unlike the original). To give it a try, head over to the [Releases page](https://github.com/OutpostUniverse/OPHD/releases) and download a recent copy.
+Current fork version: **v0.8.10-kyle.14** (shown on the main menu in-game).
 
-You may also be interested in reading the [Player Guide](PlayerGuide.md).
+## Download & play
 
-## Installation
+Pre-built **Windows x64** builds are on the **[Releases](https://github.com/peterky/OPHD-Kyle/releases)** page for this repository.
 
-### Windows
-Installation is simple: Extract the contents of the ZIP Archive into any folder. Double-click on OPHD.exe to launch the game.
+1. Download the latest `OutpostHD-KylesColony-v0.8.10-kyle.*-win64.zip`
+2. Extract anywhere
+3. Run `appOPHD.exe` (keep the `data/` folder next to the exe)
+4. Confirm the main menu shows a `kyle.*` version string
 
-As this is not an installer package it is not distributed with any necessary dependencies.
+**Requirements:** Windows 10/11 x64, and the [Microsoft VC++ Redistributable (x64)](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if the game fails to start.
 
-#### Dependencies
-The Windows build of OutpostHD is built in C++ using Microsoft's Visual Studio. If you haven't already, you may need to download and install the 64-bit [Visual C++ Redistributable](https://docs.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist?view=msvc-170) package from Microsoft.
+Save games: `%AppData%\LairWorks\OutpostHD\savegames\`
 
-### Linux, macOS
-We don't currently provide installation packages for non-Windows platforms, however we do maintain continuous integration builds for Linux and macOS. A source build can be done for these platforms.
+## What's different in this fork
 
-#### Obtaining the source
-Clone the main repository and all git submodules:
+See **[FORK_CHANGELOG.md](FORK_CHANGELOG.md)** for a version-by-version list. Highlights:
+
+- Workforce, maintenance, and production reporting (F10 reports)
+- Explorer robot deposit discovery and related research tweaks
+- Robodozer overhaul: multi-turn terrain clearing, placement queue, save repair
+- UI fixes: status panel icons, robot toolbar layout, save/load timestamps and sorting
+- Bug fixes for turn-end crashes, mine-under-tube discovery, and dozer queue spam
+
+Discussion for this fork: [Outpost2 forum thread (topic 6455)](https://forum.outpost2.net/index.php/topic,6455.0.html)
+
+## Building from source
+
+Clone **this** repository (not upstream), with submodules:
+
 ```sh
-git clone --recursive https://github.com/OutpostUniverse/OPHD.git
-```
-
-If you've already cloned the main repo without the `--recursive` flag, you can fetch the submodules as a second step, from the `OPHD` folder:
-```sh
+git clone --recursive https://github.com/peterky/OPHD-Kyle.git
+cd OPHD-Kyle
+git checkout kyle-mods
 git submodule update --init
 ```
 
-#### Installing dependencies
-Development packages are needed for the following dependencies:
-`SDL2`, `SDL2-Image`, `SDL2-Ttf`, `SDL2-Mixer` and `GLEW`
+### Windows
 
-Installation of dependencies is typically done with platform specific package managers. Additionally the package names vary by platform. To ease this burden, there is a `make` target to `install-dependencies`, which attempts to detect a few common known platforms and run platform specific dependency installation. Dependency package installation typically needs to be prefixed with `sudo` to obtain root access (though good sense would dictate that people look at what the command does before running it with `sudo`, see the `makefile` in the `nas2d-core` submodule folder for details).
-```sh
-make install-dependencies
-```
+Open `OPHD.sln` in Visual Studio 2022 and build **Release | x64**. The executable is written to `.build/Release_x64_appOPHD/appOPHD.exe`.
 
-#### Building the source code
-Use `make` from the `OPHD` folder to build:
-```sh
-make
-```
+### Linux / macOS
 
-#### Running the game
-As the build outputs are tucked away in build folders, there is a `make` target to `run` the game:
-```sh
-make run
-```
+Upstream build instructions still apply. Install dependencies (`make install-dependencies`), then `make` and `make run`. Non-Windows packages are not published for this fork.
 
 ## Configuration
-At the moment there are very few configurable options for OutpostHD. All of it must be done via the XML configuration file (config.xml) located in your User directory.
 
-The User directory will vary from platform to platform. On Windows, for example, you'll find it under "C:\Users\Your Username\AppData\Roaming\LairWorks\OutpostHD". On macOS and Linux, this will generally be in your user Home directory.
+Same as upstream: `config.xml` in the LairWorks user folder (on Windows: `%AppData%\Roaming\LairWorks\OutpostHD\`). The file is created on first run.
 
-Note that the file will only be generated after running the game for the first time.
+## Player guide
 
-## Troubleshooting
-OutpostHD is still under heavy development so there will be kinks to work out. If you're having trouble, head on over to [The Outpost Universe Forums](http://forum.outpost2.net) or the [Outpost Universe Discord Server](https://discord.gg/kDz5Q3t) for help getting OutpostHD running. The developers will usually respond quickly to questions.
+[PlayerGuide.md](PlayerGuide.md) covers base OutpostHD gameplay. Some key bindings differ in this fork (for example, F10 opens the reports panel including workforce data).
+
+## Upstream project (original team's work)
+
+OutpostHD is a reimplementation of Sierra's *Outpost* (1994) — a ground-up redesign, not a direct clone.
+
+| Resource | Link |
+| -------- | ---- |
+| Source code | [github.com/OutpostUniverse/OPHD](https://github.com/OutpostUniverse/OPHD) |
+| Official releases | [OutpostUniverse/OPHD Releases](https://github.com/OutpostUniverse/OPHD/releases) |
+| Forum | [forum.outpost2.net](http://forum.outpost2.net) |
+| OutpostHD discussion | [Forum topic 5718](http://forum.outpost2.net/index.php/topic,5718.0.html) |
+| Discord | [Outpost Universe Discord](https://discord.gg/kDz5Q3t) |
+| Upstream changelog | [CHANGELOG.md](CHANGELOG.md) |
+
+### Upstream maintainers
+
+OutpostHD is developed and maintained by the Outpost Universe team, including:
+
+- **Leeor Dicker** (leeor_net) — design & programming
+- **Hooman** — programming & system engineering
+- **White Claw** — graphics
+
+This fork builds on their work and the broader community contributions documented in the upstream project.
 
 ## License
-OutpostHD is distributed under a BSD 3-clause license. See LICENSE.md for details.
 
-## Maintainers
-OutpostHD is developed and maintained by the following contributors:
+Same license as upstream OutpostHD (BSD 3-clause). See [LICENSE.md](LICENSE.md).
 
-- Leeor Dicker (aka leeor_net): *Design & Programming*
-- Hooman: *Programming & System Engineering*
-- White Claw: *Graphics*
-
-## Special Thanks
-I'd like to give a special thanks and shout out to the following contributors who have helped to shape the direction of OutpostHD and provide extremely valuable insight in alphabetical order:
-
-- belgianguy
-- dave_erald
-- FallTime
-- Goof
-- havkyp
-- Inglonias
-- JetMech1999
-- Laura Hild
-- lhark
-- lordpalandus
-- macksting
-- matt-handy
-- singthemuse
-- Sirbomber
-- Vagabond
-- vomov
-
-Thanks for your contributions! I tried to include everybody who's provided feedback or contributed to the code and other resources. This is a community effort and OPHD would never have come this far without your help! If I missed you, let me know! You deserve the recognition!
+Fork-specific changes in this repository are offered under the same terms. OutpostHD itself remains the work of the Outpost Universe project and its contributors.
