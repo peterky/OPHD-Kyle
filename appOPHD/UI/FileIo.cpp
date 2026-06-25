@@ -11,9 +11,67 @@
 #include <NAS2D/EventHandler.h>
 #include <NAS2D/EnumKeyCode.h>
 #include <NAS2D/Math/Point.h>
+#include <NAS2D/Resource/Font.h>
 
-#include <string>
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <vector>
+
+
+namespace
+{
+	constexpr int MarginTight{2};
+
+	std::string formatFileTime(const std::filesystem::file_time_type& fileTime)
+	{
+		const auto systemTime = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+			fileTime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+		const auto time = std::chrono::system_clock::to_time_t(systemTime);
+
+		std::tm localTime{};
+		localtime_s(&localTime, &time);
+
+		std::ostringstream stream;
+		stream << std::put_time(&localTime, "%Y-%m-%d %H:%M");
+		return stream.str();
+	}
+
+
+	struct SaveGameEntry
+	{
+		std::string name;
+		std::filesystem::file_time_type modifiedTime;
+	};
+}
+
+
+int SaveGameListItem::ListBoxTheme::itemHeight() const
+{
+	return font.height() + MarginTight;
+}
+
+
+void SaveGameListItem::draw(NAS2D::Renderer& renderer, NAS2D::Rectangle<int> drawRect, const ListBoxTheme& theme, bool /*isSelected*/, bool isHighlighted) const
+{
+	if (isHighlighted)
+	{
+		renderer.drawBox(drawRect, theme.itemBorderColorMouseHover);
+	}
+
+	const auto textColor = isHighlighted ? theme.textColorMouseHover : theme.textColorNormal;
+	const auto textMargin = NAS2D::Vector{MarginTight, 0};
+	const auto textPosition = drawRect.position + textMargin;
+
+	renderer.drawTextShadow(theme.font, saveName, textPosition, {1, 1}, textColor, NAS2D::Color::Black);
+
+	const auto timestampWidth = theme.font.width(timestamp);
+	const auto timestampPosition = NAS2D::Point{drawRect.endPoint().x - timestampWidth - MarginTight, textPosition.y};
+	renderer.drawTextShadow(theme.font, timestamp, timestampPosition, {1, 1}, textColor, NAS2D::Color::Black);
+}
 
 
 FileIo::FileIo(FileLoadDelegate fileLoadHandler, FileSaveDelegate fileSaveHandler) :
@@ -25,12 +83,20 @@ FileIo::FileIo(FileLoadDelegate fileLoadHandler, FileSaveDelegate fileSaveHandle
 	mCancel{"Cancel", {this, &FileIo::onClose}},
 	mFileOperation{"FileOp", {this, &FileIo::onFileIo}},
 	mDeleteFile{"Delete", {this, &FileIo::onFileDelete}},
+	mSortByName{"Name", {this, &FileIo::onSortByName}},
+	mSortByDate{"Date", {this, &FileIo::onSortByDate}},
 	mFileName{50, {this, &FileIo::onFileNameChange}},
 	mListBox{{this, &FileIo::onFileSelect}}
 {
 	auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();
 	eventHandler.mouseDoubleClick().connect({this, &FileIo::onDoubleClick});
 	eventHandler.keyDown().connect({this, &FileIo::onKeyDown});
+
+	mSortByName.size({50, 18});
+	mSortByDate.size({50, 18});
+	add(mSortByName, {5, sWindowTitleBarHeight + 2});
+	add(mSortByDate, {60, sWindowTitleBarHeight + 2});
+	updateSortButtons();
 
 	mOpenSaveFolder.size({std::max(105, mOpenSaveFolder.size().x + constants::Margin), 20});
 	add(mOpenSaveFolder, {5 + 690 - mOpenSaveFolder.size().x, sWindowTitleBarHeight + 2});
@@ -89,20 +155,69 @@ void FileIo::showSave(const std::string& directory)
 
 void FileIo::scanDirectory(const std::string& directory)
 {
-	mScanPath = (NAS2D::Utility<NAS2D::Filesystem>::get().prefPath() / NAS2D::VirtualPath{directory}).string();
+	mDirectory = directory;
 
 	const auto& filesystem = NAS2D::Utility<NAS2D::Filesystem>::get();
+	mScanPath = (filesystem.prefPath() / NAS2D::VirtualPath{directory}).string();
+
 	auto dirList = filesystem.directoryList(NAS2D::VirtualPath{directory});
-	std::sort(dirList.begin(), dirList.end());
+	const auto saveDirectory = std::filesystem::path{filesystem.prefPath().string()} / directory;
+
+	std::vector<SaveGameEntry> entries;
+	entries.reserve(dirList.size());
+
+	for (const auto& dir : dirList)
+	{
+		if (filesystem.isDirectory(NAS2D::VirtualPath{directory + dir.string()}))
+		{
+			continue;
+		}
+
+		const auto diskPath = saveDirectory / dir.string();
+		entries.push_back({dir.stem().string(), std::filesystem::last_write_time(diskPath)});
+	}
+
+	if (mSortMode == SortMode::Name)
+	{
+		std::sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+			return left.name < right.name;
+		});
+	}
+	else
+	{
+		std::sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+			return left.modifiedTime > right.modifiedTime;
+		});
+	}
 
 	mListBox.clear();
-	for (auto& dir : dirList)
+	for (const auto& entry : entries)
 	{
-		if (!filesystem.isDirectory(NAS2D::VirtualPath{directory + dir.string()}))
-		{
-			mListBox.add(dir.stem().string());
-		}
+		mListBox.add(entry.name, formatFileTime(entry.modifiedTime));
 	}
+}
+
+
+void FileIo::updateSortButtons()
+{
+	mSortByName.enabled(mSortMode != SortMode::Name);
+	mSortByDate.enabled(mSortMode != SortMode::DateTime);
+}
+
+
+void FileIo::onSortByName()
+{
+	mSortMode = SortMode::Name;
+	updateSortButtons();
+	scanDirectory(mDirectory);
+}
+
+
+void FileIo::onSortByDate()
+{
+	mSortMode = SortMode::DateTime;
+	updateSortButtons();
+	scanDirectory(mDirectory);
 }
 
 
@@ -134,10 +249,6 @@ void FileIo::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier /*mod*/, bool /*re
 			onFileIo();
 		}
 	}
-	else if (key == NAS2D::KeyCode::Escape)
-	{
-		onClose();
-	}
 }
 
 
@@ -149,7 +260,7 @@ void FileIo::onOpenFolder() const
 
 void FileIo::onFileSelect()
 {
-	mFileName.text(mListBox.isItemSelected() ? mListBox.selected().text : "");
+	mFileName.text(mListBox.isItemSelected() ? mListBox.selected().saveName : "");
 }
 
 
@@ -177,10 +288,16 @@ void FileIo::onFileNameChange(TextField& control)
 }
 
 
-void FileIo::onClose()
+void FileIo::close()
 {
 	visible(false);
 	mFileName.clear();
+}
+
+
+void FileIo::onClose()
+{
+	close();
 }
 
 

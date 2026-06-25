@@ -209,8 +209,12 @@ void IconGrid::draw(NAS2D::Renderer& renderer) const
 			const auto& highlightedName = mIconItemList[mHighlightIndex].name;
 			const auto textMargin = NAS2D::Vector{2, 0};
 			const auto textBoxSize = mFont.size(highlightedName) + textMargin * 2;
-			const auto textBoxOffset = NAS2D::Vector{0, -textBoxSize.y};
-			const auto tooltipRect = NAS2D::Rectangle{iconArea.position + textBoxOffset, textBoxSize};
+			const auto textBoxOffsetAbove = NAS2D::Vector{0, -textBoxSize.y};
+			const auto textBoxOffsetBelow = NAS2D::Vector{0, iconArea.size.y};
+			const auto tooltipAbove = NAS2D::Rectangle{iconArea.position + textBoxOffsetAbove, textBoxSize};
+			const auto tooltipRect = tooltipAbove.position.y < 0 ?
+				NAS2D::Rectangle{iconArea.position + textBoxOffsetBelow, textBoxSize} :
+				tooltipAbove;
 			renderer.drawBoxFilled(tooltipRect, NAS2D::Color{245, 245, 245});
 			renderer.drawBox(tooltipRect, NAS2D::Color{175, 175, 175});
 			renderer.drawText(mFont, highlightedName, tooltipRect.position + textMargin, NAS2D::Color::Black);
@@ -223,7 +227,13 @@ void IconGrid::onResize()
 {
 	Control::onResize();
 
-	mGridSizeInIcons = (mRect.size - NAS2D::Vector{mIconMargin, mIconMargin} * 2) / (mIconSize + mIconMargin);
+	const auto available = mRect.size - NAS2D::Vector{mIconMargin, mIconMargin} * 2;
+	const auto cellStride = mIconSize + mIconMargin;
+	mGridSizeInIcons = available / cellStride;
+
+	// A single icon only needs margin + iconSize (not a full cell stride).
+	if (mRect.size.x >= mIconMargin + mIconSize) { mGridSizeInIcons.x = std::max(mGridSizeInIcons.x, 1); }
+	if (mRect.size.y >= mIconMargin + mIconSize) { mGridSizeInIcons.y = std::max(mGridSizeInIcons.y, 1); }
 }
 
 
