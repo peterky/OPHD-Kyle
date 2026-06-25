@@ -543,12 +543,6 @@ void MapViewState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*
 		return;
 	}
 
-	if (key == NAS2D::KeyCode::F10)
-	{
-		mReportsState.showReportPanel(ReportsState::ReportPanel::Workforce);
-		return;
-	}
-
 	if (key == NAS2D::KeyCode::Enter && NAS2D::EventHandler::alt(mod))
 	{
 		mSkipTurnsDialog.show();

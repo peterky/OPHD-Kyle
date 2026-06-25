@@ -1,7 +1,9 @@
 name: Build
 
+# Upstream OPHD runs this on every push across a large Windows/Linux matrix.
+# This fork publishes Windows builds locally; disable automatic CI to avoid
+# failure-notification spam. Trigger manually from the Actions tab if needed.
 on:
-  push:
   workflow_dispatch:
 
 jobs:

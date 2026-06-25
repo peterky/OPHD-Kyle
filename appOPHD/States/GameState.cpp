@@ -19,7 +19,24 @@
 #include <NAS2D/Xml/XmlDocument.h>
 #include <NAS2D/Xml/XmlMemoryBuffer.h>
 
+#include <optional>
 #include <stdexcept>
+
+
+namespace
+{
+	std::string sessionDisplayName(const std::string& saveGamePath)
+	{
+		const auto lastSlash = saveGamePath.find_last_of("/\\");
+		auto filename = (lastSlash == std::string::npos) ? saveGamePath : saveGamePath.substr(lastSlash + 1);
+		const auto extension = filename.rfind('.');
+		if (extension != std::string::npos)
+		{
+			filename = filename.substr(0, extension);
+		}
+		return filename;
+	}
+}
 
 
 NAS2D::Point<int> MOUSE_COORDS; /**< Mouse Coordinates. Used by other states/wrappers. */
@@ -29,7 +46,7 @@ GameState::GameState(const std::string& savedGameFilename) :
 	mStructureManager{NAS2D::Utility<StructureManager>::get()},
 	mSaveGameFile{savedGameFilename},
 	mReportsState{mStructureManager, {this, &GameState::onTakeMeThere}, {this, &GameState::onShowReports}, {this, &GameState::onHideReports}},
-	mMapViewState{*this, mSaveGameFile, {this, &GameState::onQuit}},
+	mMapViewState{*this, mSaveGameFile, sessionDisplayName(savedGameFilename), {this, &GameState::onQuit}},
 	mColonyShip{mSaveGameFile.colonyShip()},
 	mFileIoDialog{{this, &GameState::onLoadGame}, {this, &GameState::onSaveGame}}
 {}
@@ -96,6 +113,35 @@ void GameState::onMouseMove(NAS2D::Point<int> position, NAS2D::Vector<int> /*rel
 
 void GameState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*repeat*/)
 {
+	if (mActiveState == &mReportsState)
+	{
+		if (key == NAS2D::KeyCode::Escape)
+		{
+			onHideReports();
+			return;
+		}
+
+		const auto reportPanelForKey = [](NAS2D::KeyCode hotkey) -> std::optional<ReportsState::ReportPanel>
+		{
+			switch (hotkey)
+			{
+			case NAS2D::KeyCode::F4: return ReportsState::ReportPanel::Research;
+			case NAS2D::KeyCode::F5: return ReportsState::ReportPanel::Factories;
+			case NAS2D::KeyCode::F6: return ReportsState::ReportPanel::Warehouses;
+			case NAS2D::KeyCode::F7: return ReportsState::ReportPanel::Mines;
+			case NAS2D::KeyCode::F8: return ReportsState::ReportPanel::Production;
+			case NAS2D::KeyCode::F9: return ReportsState::ReportPanel::Maintenance;
+			default: return std::nullopt;
+			}
+		};
+
+		if (const auto panel = reportPanelForKey(key))
+		{
+			mReportsState.showReportPanel(*panel);
+			return;
+		}
+	}
+
 	if (key == NAS2D::KeyCode::F12)
 	{
 		auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();

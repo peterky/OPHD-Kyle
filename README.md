@@ -4,7 +4,7 @@ An unofficial personal fork of [OutpostHD](https://github.com/OutpostUniverse/OP
 
 **This is not an official [Outpost Universe](http://forum.outpost2.net) release.** For the original project, its maintainers, and official builds, see [OutpostUniverse/OPHD](https://github.com/OutpostUniverse/OPHD).
 
-Current fork version: **v0.8.10-kyle.14** (shown on the main menu in-game).
+Current fork version: **v0.8.10-kyle.15** (shown on the main menu in-game).
 
 ## Download & play
 
@@ -56,7 +56,7 @@ Same as upstream: `config.xml` in the LairWorks user folder (on Windows: `%AppDa
 
 ## Player guide
 
-[PlayerGuide.md](PlayerGuide.md) covers base OutpostHD gameplay. Some key bindings differ in this fork (for example, F10 opens the reports panel including workforce data).
+[PlayerGuide.md](PlayerGuide.md) covers base OutpostHD gameplay. Workforce and other fork reports are available from the reports panel (F1); Ctrl+Shift+F10 still opens the cheat menu as in upstream.
 
 ## Upstream project (original team's work)
 

@@ -4,6 +4,14 @@ Changes in this fork relative to upstream [OutpostHD v0.8.10](https://github.com
 
 Version strings appear on the main menu as `v0.8.10-kyle.N`.
 
+## [kyle.15] — 2026-06-24
+
+### Fixed
+- Removed F10 workforce-report hotkey that blocked Ctrl+Shift+F10 cheat menu
+
+### Changed
+- Disabled automatic GitHub Actions builds on push (upstream CI matrix; manual trigger only)
+
 ## [kyle.14] — 2026-06-24
 
 ### Fixed
