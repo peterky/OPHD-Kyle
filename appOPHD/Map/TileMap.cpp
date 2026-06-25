@@ -16,7 +16,9 @@
 #include <NAS2D/Resource/Image.h>
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <numeric>
 #include <array>
 
@@ -46,7 +48,7 @@ namespace {
 	}
 
 
-	std::vector<NAS2D::Point<int>> generateOreDeposits(NAS2D::Vector<int> mapSize, std::size_t oreDepositCount)
+	std::vector<NAS2D::Point<int>> generateOreDeposits(NAS2D::Vector<int> mapSize, std::size_t oreDepositCount, const std::vector<bool>& usedLocations)
 	{
 		auto randPoint = [mapSize]() {
 			return NAS2D::Point{
@@ -61,18 +63,23 @@ namespace {
 		// Some locations might not be acceptable, so try up to twice as many locations
 		// A high density of ore deposits could result in many rejected locations
 		// Don't try indefinitely to avoid possibility of infinite loop
-		std::vector<bool> usedLocations(linearSize(mapSize));
+		auto blockedLocations = usedLocations;
+		if (blockedLocations.size() != linearSize(mapSize))
+		{
+			blockedLocations.assign(linearSize(mapSize), false);
+		}
+
 		for (std::size_t i = 0; (locations.size() < oreDepositCount) && (i < oreDepositCount * 2); ++i)
 		{
 			// Generate a location and check surroundings for minimum spacing
 			const auto point = randPoint();
-			if (!usedLocations[linearIndex(point, mapSize.x)])
+			if (!blockedLocations[linearIndex(point, mapSize.x)])
 			{
 				locations.push_back(point);
 				for (const auto& offset : DirectionScan3x3)
 				{
 					const auto usedPoint = point + offset;
-					usedLocations[linearIndex(usedPoint, mapSize.x)] = true;
+					blockedLocations[linearIndex(usedPoint, mapSize.x)] = true;
 				}
 			}
 		}
@@ -81,19 +88,39 @@ namespace {
 	}
 
 
-	std::vector<OreDeposit*> placeOreDeposits(TileMap& tileMap, const std::vector<NAS2D::Point<int>>& locations, const TileMap::OreDepositYields& oreDepositYields)
+	std::vector<bool> markOreDepositLocations(NAS2D::Vector<int> mapSize, const std::vector<NAS2D::Point<int>>& locations)
 	{
-		std::vector<OreDeposit*> oreDeposits;
-		oreDeposits.reserve(locations.size());
+		std::vector<bool> usedLocations(linearSize(mapSize));
+		for (const auto& point : locations)
+		{
+			for (const auto& offset : DirectionScan3x3)
+			{
+				const auto usedPoint = point + offset;
+				usedLocations[linearIndex(usedPoint, mapSize.x)] = true;
+			}
+		}
+		return usedLocations;
+	}
 
+
+	auto makeYieldSelector(const TileMap::OreDepositYields& oreDepositYields)
+	{
 		const auto total = std::accumulate(oreDepositYields.begin(), oreDepositYields.end(), 0);
-
-		const auto randYield = [oreDepositYields, total]() {
+		return [oreDepositYields, total]() {
 			const auto randValue = randomNumber.generate<int>(1, total);
 			return (randValue <= oreDepositYields[0]) ? OreDepositYield::Low :
 				(randValue <= oreDepositYields[0] + oreDepositYields[1]) ? OreDepositYield::Medium :
 				OreDepositYield::High;
 		};
+	}
+
+
+	std::vector<OreDeposit*> placeOreDeposits(TileMap& tileMap, const std::vector<NAS2D::Point<int>>& locations, const TileMap::OreDepositYields& oreDepositYields)
+	{
+		std::vector<OreDeposit*> oreDeposits;
+		oreDeposits.reserve(locations.size());
+
+		const auto randYield = makeYieldSelector(oreDepositYields);
 
 		for (const auto& location : locations)
 		{
@@ -171,7 +198,29 @@ namespace {
 TileMap::TileMap(const std::string& mapPath, int maxDepth, std::size_t oreDepositCount, const OreDepositYields& oreDepositYields) :
 	TileMap{mapPath, maxDepth}
 {
-	mOreDeposits = placeOreDeposits(*this, generateOreDeposits(mSizeInTiles, oreDepositCount), oreDepositYields);
+	const auto visibleLocations = generateOreDeposits(mSizeInTiles, oreDepositCount, {});
+	mOreDeposits = placeOreDeposits(*this, visibleLocations, oreDepositYields);
+	populateUndiscoveredOreDeposits(oreDepositCount, oreDepositYields);
+}
+
+
+void TileMap::populateUndiscoveredOreDeposits(std::size_t oreDepositCount, const OreDepositYields& oreDepositYields)
+{
+	std::vector<NAS2D::Point<int>> visibleLocations;
+	visibleLocations.reserve(mOreDeposits.size());
+	for (const auto* deposit : mOreDeposits)
+	{
+		visibleLocations.push_back(deposit->location());
+	}
+
+	const auto blockedLocations = markOreDepositLocations(mSizeInTiles, visibleLocations);
+	const auto hiddenLocations = generateOreDeposits(mSizeInTiles, oreDepositCount, blockedLocations);
+	const auto randYield = makeYieldSelector(oreDepositYields);
+	mUndiscoveredOreDeposits.reserve(mUndiscoveredOreDeposits.size() + hiddenLocations.size());
+	for (const auto& location : hiddenLocations)
+	{
+		mUndiscoveredOreDeposits.push_back(UndiscoveredOreDeposit{location, randYield()});
+	}
 }
 
 
@@ -235,6 +284,109 @@ const std::vector<OreDeposit*>& TileMap::oreDeposits() const
 }
 
 
+std::optional<NAS2D::Point<int>> TileMap::prospectForOreDeposit(NAS2D::Point<int> searchCenter, int searchRadius)
+{
+	std::optional<std::size_t> bestIndex;
+	int bestDistance = std::numeric_limits<int>::max();
+
+	for (std::size_t i = 0; i < mUndiscoveredOreDeposits.size(); ++i)
+	{
+		const auto& deposit = mUndiscoveredOreDeposits[i];
+		const auto delta = searchCenter - deposit.location;
+		const auto distance = std::max(std::abs(delta.x), std::abs(delta.y));
+		if (distance > searchRadius) { continue; }
+
+		auto& tile = getTile({deposit.location, 0});
+		if (tile.hasOreDeposit() || tile.hasMapObject()) { continue; }
+
+		if (!bestIndex || distance < bestDistance)
+		{
+			bestDistance = distance;
+			bestIndex = i;
+		}
+	}
+
+	if (!bestIndex) { return std::nullopt; }
+
+	const auto undiscoveredDeposit = mUndiscoveredOreDeposits[*bestIndex];
+	mUndiscoveredOreDeposits.erase(mUndiscoveredOreDeposits.begin() + static_cast<std::ptrdiff_t>(*bestIndex));
+
+	auto& tile = getTile({undiscoveredDeposit.location, 0});
+	auto* oreDeposit = new OreDeposit(undiscoveredDeposit.yield, undiscoveredDeposit.location);
+	tile.placeOreDeposit(oreDeposit);
+	tile.bulldoze();
+	mOreDeposits.push_back(oreDeposit);
+
+	return undiscoveredDeposit.location;
+}
+
+
+std::optional<NAS2D::Point<int>> TileMap::spawnEmergencyOreDeposit(NAS2D::Point<int> preferredCenter)
+{
+	std::vector<NAS2D::Point<int>> existingLocations;
+	existingLocations.reserve(mOreDeposits.size());
+	for (const auto* deposit : mOreDeposits)
+	{
+		existingLocations.push_back(deposit->location());
+	}
+
+	const auto blockedLocations = markOreDepositLocations(mSizeInTiles, existingLocations);
+	constexpr OreDepositYields defaultYields{30, 50, 20};
+	const auto randYield = makeYieldSelector(defaultYields);
+
+	for (int attempt = 0; attempt < 100; ++attempt)
+	{
+		const auto point = NAS2D::Point<int>{
+			std::clamp(preferredCenter.x + randomNumber.generate<int>(-25, 25), 5, mSizeInTiles.x - 6),
+			std::clamp(preferredCenter.y + randomNumber.generate<int>(-25, 25), 5, mSizeInTiles.y - 6)
+		};
+
+		const auto blockedIndex = static_cast<std::size_t>(point.x) + static_cast<std::size_t>(mSizeInTiles.x) * static_cast<std::size_t>(point.y);
+		if (blockedLocations.at(blockedIndex)) { continue; }
+
+		auto& tile = getTile({point, 0});
+		if (tile.hasOreDeposit() || tile.hasMapObject()) { continue; }
+
+		auto* oreDeposit = new OreDeposit(randYield(), point);
+		tile.placeOreDeposit(oreDeposit);
+		tile.bulldoze();
+		mOreDeposits.push_back(oreDeposit);
+		return point;
+	}
+
+	return std::nullopt;
+}
+
+
+std::vector<NAS2D::Point<int>> TileMap::prospectForOreDeposits(NAS2D::Point<int> searchCenter, int searchRadius, int depositCount)
+{
+	std::vector<NAS2D::Point<int>> discovered;
+	discovered.reserve(static_cast<std::size_t>(depositCount));
+
+	const auto mapSpan = std::max(mSizeInTiles.x, mSizeInTiles.y);
+
+	for (int i = 0; i < depositCount; ++i)
+	{
+		std::optional<NAS2D::Point<int>> location = prospectForOreDeposit(searchCenter, searchRadius);
+		if (!location)
+		{
+			location = prospectForOreDeposit(searchCenter, mapSpan);
+		}
+		if (!location)
+		{
+			location = spawnEmergencyOreDeposit(searchCenter);
+		}
+
+		if (location)
+		{
+			discovered.push_back(*location);
+		}
+	}
+
+	return discovered;
+}
+
+
 void TileMap::removeOreDepositLocation(const NAS2D::Point<int>& location)
 {
 	auto& tile = getTile({location, 0});
@@ -261,6 +413,20 @@ void TileMap::serialize(NAS2D::Xml::XmlElement* element)
 	for (const auto* oreDeposit : mOreDeposits)
 	{
 		oreDeposits->linkEndChild(serializeOreDeposit(*oreDeposit));
+	}
+
+	auto* hiddenOreDeposits = new NAS2D::Xml::XmlElement("hidden_mines");
+	element->linkEndChild(hiddenOreDeposits);
+	for (const auto& deposit : mUndiscoveredOreDeposits)
+	{
+		hiddenOreDeposits->linkEndChild(NAS2D::dictionaryToAttributes(
+			"mine",
+			NAS2D::Dictionary{{
+				{"x", deposit.location.x},
+				{"y", deposit.location.y},
+				{"yield", static_cast<int>(deposit.yield)},
+			}}
+		));
 	}
 
 
@@ -311,6 +477,23 @@ void TileMap::deserialize(NAS2D::Xml::XmlElement* element)
 		tile.bulldoze();
 
 		mOreDeposits.push_back(oreDeposit);
+	}
+
+	if (auto* hiddenOreDeposits = element->firstChildElement("hidden_mines"))
+	{
+		for (auto* hiddenDepositElement = hiddenOreDeposits->firstChildElement("mine"); hiddenDepositElement; hiddenDepositElement = hiddenDepositElement->nextSiblingElement())
+		{
+			const auto dictionary = NAS2D::attributesToDictionary(*hiddenDepositElement);
+			mUndiscoveredOreDeposits.push_back(UndiscoveredOreDeposit{
+				{dictionary.get<int>("x"), dictionary.get<int>("y")},
+				static_cast<OreDepositYield>(dictionary.get<int>("yield")),
+			});
+		}
+	}
+	else
+	{
+		constexpr OreDepositYields defaultYields{30, 50, 20};
+		populateUndiscoveredOreDeposits(mOreDeposits.size(), defaultYields);
 	}
 
 	// Tiles indexes

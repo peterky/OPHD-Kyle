@@ -1204,37 +1204,12 @@ bool MapViewState::executeRobodozerAt(Tile& tile)
 	{
 		return false;
 	}
-	else if (tile.oreDeposit())
-	{
-		if (tile.oreDeposit()->digDepth() != mTileMap->maxDepth() || !tile.oreDeposit()->isExhausted())
-		{
-			doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertMineNotExhausted);
-			return false;
-		}
-
-		mMineOperationsWindow.hide();
-
-		const auto& mineFacility = dynamic_cast<MineFacility&>(*tile.structure());
-		mOreHaulRoutes->removeMine(mineFacility);
-
-		const auto tilePosition = tile.xy();
-		for (int i = 0; i <= mTileMap->maxDepth(); ++i)
-		{
-			auto& mineShaftTile = mTileMap->getTile({tilePosition, i});
-			if (mineShaftTile.hasStructure())
-			{
-				mStructureManager.removeStructure(*mineShaftTile.structure());
-			}
-		}
-		mTileMap->removeOreDepositLocation(tilePosition);
-	}
-	else if (tile.hasStructure())
+	else if (tile.hasStructure() && !tile.structure()->isMineFacility())
 	{
 		mStructureInspector.hideStructure(*tile.structure());
 
 		Structure* structure = tile.structure();
 
-		if (structure->isMineFacility()) { return false; }
 		if (structure->isCommand())
 		{
 			doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertCannotBulldozeCc);
@@ -1301,6 +1276,42 @@ bool MapViewState::executeRobodozerAt(Tile& tile)
 		mStructureManager.removeStructure(*structure);
 		updateConnectedness();
 	}
+	else if (tile.oreDeposit())
+	{
+		const auto* deposit = tile.oreDeposit();
+
+		if (deposit->digDepth() == 0)
+		{
+			mTileMap->removeOreDepositLocation(tile.xy());
+		}
+		else if (deposit->digDepth() != mTileMap->maxDepth() || !deposit->isExhausted())
+		{
+			doAlertMessage(constants::AlertInvalidRobotPlacement, constants::AlertMineNotExhausted);
+			return false;
+		}
+		else if (!tile.hasStructure() || !tile.structure()->isMineFacility())
+		{
+			mTileMap->removeOreDepositLocation(tile.xy());
+		}
+		else
+		{
+			mMineOperationsWindow.hide();
+
+			const auto& mineFacility = dynamic_cast<MineFacility&>(*tile.structure());
+			mOreHaulRoutes->removeMine(mineFacility);
+
+			const auto tilePosition = tile.xy();
+			for (int i = 0; i <= mTileMap->maxDepth(); ++i)
+			{
+				auto& mineShaftTile = mTileMap->getTile({tilePosition, i});
+				if (mineShaftTile.hasStructure())
+				{
+					mStructureManager.removeStructure(*mineShaftTile.structure());
+				}
+			}
+			mTileMap->removeOreDepositLocation(tilePosition);
+		}
+	}
 
 	mRobotPool.deployDozer(tile);
 	return true;
@@ -1326,6 +1337,16 @@ void MapViewState::processDozerQueue(bool maintainBuildMode)
 		if (!executeRobodozerAt(queuedTile))
 		{
 			if (queuedTile.isBulldozed() && !queuedTile.hasStructure()) { continue; }
+
+			if (queuedTile.oreDeposit())
+			{
+				const auto* deposit = queuedTile.oreDeposit();
+				if (deposit->digDepth() != mTileMap->maxDepth() || !deposit->isExhausted())
+				{
+					continue;
+				}
+			}
+
 			pending.push_back(coord);
 			continue;
 		}
