@@ -182,6 +182,7 @@ MapViewState::MapViewState(GameState& gameState, SavedGameFile& saveGameFile, co
 	mStructures{mMapObjectPicker.structures()},
 	mRobots{mMapObjectPicker.robots()},
 	mConnections{mMapObjectPicker.tubes()},
+	mMinerRobot{mMapObjectPicker.minerRobot()},
 	mBtnTurns{Control::getImage("ui/icons/turns.png"), {this, &MapViewState::onTurns}},
 	mBtnToggleHeightmap{Control::getImage("ui/icons/height.png"), {this, &MapViewState::onToggleHeightmap}},
 	mBtnToggleRouteOverlay{Control::getImage("ui/icons/route.png"), {this, &MapViewState::onToggleRouteOverlay}},
@@ -233,6 +234,7 @@ MapViewState::MapViewState(GameState& gameState, const PlanetAttributes& planetA
 	mStructures{mMapObjectPicker.structures()},
 	mRobots{mMapObjectPicker.robots()},
 	mConnections{mMapObjectPicker.tubes()},
+	mMinerRobot{mMapObjectPicker.minerRobot()},
 	mBtnTurns{Control::getImage("ui/icons/turns.png"), {this, &MapViewState::onTurns}},
 	mBtnToggleHeightmap{Control::getImage("ui/icons/height.png"), {this, &MapViewState::onToggleHeightmap}},
 	mBtnToggleRouteOverlay{Control::getImage("ui/icons/route.png"), {this, &MapViewState::onToggleRouteOverlay}},
@@ -1453,7 +1455,7 @@ void MapViewState::placeRobominer(Tile& tile)
 
 	if (!mRobotPool.robotAvailable(RobotTypeIndex::Miner))
 	{
-		mRobots.removeItem(constants::Robominer);
+		mMinerRobot.removeItem(constants::Robominer);
 		mMapObjectPicker.clearBuildMode();
 	}
 }
@@ -1534,6 +1536,7 @@ void MapViewState::populateRobotMenu()
 		: RobotTypeIndex::None;
 
 	mRobots.clear();
+	mMinerRobot.clear();
 
 	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
 	updateLeftSummaryLayout();
@@ -1542,9 +1545,16 @@ void MapViewState::populateRobotMenu()
 	{
 		if (robotTypeIndex == RobotTypeIndex::Explorer && !researchEffects.explorerBotUnlocked) { continue; }
 
-		if (mRobotPool.robotAvailable(robotTypeIndex))
+		if (!mRobotPool.robotAvailable(robotTypeIndex)) { continue; }
+
+		const auto item = IconGridItem{robotMeta.name, robotMeta.sheetIndex, static_cast<int>(robotTypeIndex)};
+		if (robotTypeIndex == RobotTypeIndex::Miner)
 		{
-			mRobots.addItem({robotMeta.name, robotMeta.sheetIndex, static_cast<int>(robotTypeIndex)});
+			mMinerRobot.addItem(item);
+		}
+		else
+		{
+			mRobots.addItem(item);
 		}
 	}
 

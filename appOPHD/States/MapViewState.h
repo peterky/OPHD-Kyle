@@ -332,6 +332,7 @@ private:
 	IconGrid& mStructures;
 	IconGrid& mRobots;
 	IconGrid& mConnections;
+	IconGrid& mMinerRobot;
 
 	// USER INTERFACE
 	Button mBtnTurns;

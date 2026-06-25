@@ -106,15 +106,16 @@ enum class InsertMode
 
 
 MapObjectPicker::MapObjectPicker(const StorableResources& resources, SelectionChangedDelegate selectionChangedHandler) :
-	ControlContainer{{&mStructures, &mConnections, &mRobots}},
+	ControlContainer{{&mStructures, &mConnections, &mMinerRobot, &mRobots}},
 	mSelectionChangedHandler{selectionChangedHandler},
 	mResourcesCount{resources},
 	mInsertMode{InsertMode::None},
 	mCurrentStructure{StructureID::None},
 	mCurrentRobot{RobotTypeIndex::None},
 	mStructures{{this, &MapObjectPicker::onStructuresSelectionChange}, "ui/structures.png", StructureIconSize, constants::MarginTight, true},
-	mRobots{{this, &MapObjectPicker::onRobotsSelectionChange}, "ui/robots.png", RobotIconSize, constants::MarginTight, true},
-	mConnections{{this, &MapObjectPicker::onConnectionsSelectionChange}, "ui/structures.png", StructureIconSize, constants::MarginTight}
+	mConnections{{this, &MapObjectPicker::onConnectionsSelectionChange}, "ui/structures.png", StructureIconSize, constants::MarginTight, true},
+	mMinerRobot{{this, &MapObjectPicker::onMinerRobotSelectionChange}, "ui/robots.png", RobotIconSize, constants::MarginTight, true},
+	mRobots{{this, &MapObjectPicker::onRobotsSelectionChange}, "ui/robots.png", RobotIconSize, constants::MarginTight, true}
 {
 }
 
@@ -201,7 +202,34 @@ void MapObjectPicker::clearSelections()
 {
 	mStructures.clearSelection();
 	mConnections.clearSelection();
+	mMinerRobot.clearSelection();
 	mRobots.clearSelection();
+}
+
+
+bool MapObjectPicker::selectStructure(StructureID structureId)
+{
+	if (structureId == StructureID::None) { return false; }
+
+	const auto typeIndex = StructureCatalog::typeIndex(structureId);
+	const auto& structureType = StructureCatalog::getType(typeIndex);
+
+	if (!mStructures.itemExists(structureType.name)) { return false; }
+
+	if (!mStructures.itemAvailable(structureType.name))
+	{
+		resourceShortageMessage(mResourcesCount, structureId);
+		return false;
+	}
+
+	mConnections.clearSelection();
+	mMinerRobot.clearSelection();
+	mRobots.clearSelection();
+	mStructures.setSelectionByMeta(static_cast<int>(typeIndex));
+	mCurrentStructure = structureId;
+	mInsertMode = InsertMode::Structure;
+	mSelectionChangedHandler();
+	return true;
 }
 
 
@@ -221,18 +249,25 @@ bool MapObjectPicker::selectRobot(RobotTypeIndex robotTypeIndex)
 	case RobotTypeIndex::Miner:
 		robotName = constants::Robominer;
 		break;
+	case RobotTypeIndex::Explorer:
+		robotName = constants::Roboexplorer;
+		break;
 	default:
 		return false;
 	}
 
-	if (!mRobots.itemExists(robotName) || !mRobots.itemAvailable(robotName))
+	auto& robotGrid = robotTypeIndex == RobotTypeIndex::Miner ? mMinerRobot : mRobots;
+
+	if (!robotGrid.itemExists(robotName) || !robotGrid.itemAvailable(robotName))
 	{
 		return false;
 	}
 
 	mStructures.clearSelection();
 	mConnections.clearSelection();
-	mRobots.setSelectionByMeta(static_cast<int>(robotTypeIndex));
+	mRobots.clearSelection();
+	mMinerRobot.clearSelection();
+	robotGrid.setSelectionByMeta(static_cast<int>(robotTypeIndex));
 	mCurrentRobot = robotTypeIndex;
 	mInsertMode = InsertMode::Robot;
 	mSelectionChangedHandler();
@@ -249,6 +284,7 @@ void MapObjectPicker::onStructuresSelectionChange(const IconGridItem* item)
 	}
 
 	mConnections.clearSelection();
+	mMinerRobot.clearSelection();
 	mRobots.clearSelection();
 
 	const auto structureId = static_cast<StructureID>(item->meta);
@@ -278,11 +314,30 @@ void MapObjectPicker::onConnectionsSelectionChange(const IconGridItem* item)
 		return;
 	}
 
+	mMinerRobot.clearSelection();
 	mRobots.clearSelection();
 	mStructures.clearSelection();
 
 	mCurrentStructure = StructureID::Tube;
 	mInsertMode = InsertMode::Tube;
+	mSelectionChangedHandler();
+}
+
+
+void MapObjectPicker::onMinerRobotSelectionChange(const IconGridItem* item)
+{
+	if (!item)
+	{
+		clearBuildMode();
+		return;
+	}
+
+	mConnections.clearSelection();
+	mRobots.clearSelection();
+	mStructures.clearSelection();
+
+	mCurrentRobot = static_cast<RobotTypeIndex>(item->meta);
+	mInsertMode = InsertMode::Robot;
 	mSelectionChangedHandler();
 }
 
@@ -299,6 +354,7 @@ void MapObjectPicker::onRobotsSelectionChange(const IconGridItem* item)
 	}
 
 	mConnections.clearSelection();
+	mMinerRobot.clearSelection();
 	mStructures.clearSelection();
 
 	mCurrentRobot = static_cast<RobotTypeIndex>(item->meta);
@@ -309,11 +365,16 @@ void MapObjectPicker::onRobotsSelectionChange(const IconGridItem* item)
 
 void MapObjectPicker::onResize()
 {
-	mRobots.position(mRect.crossXPoint() - NAS2D::Vector{52, 0});
-	mConnections.position({mRobots.position().x - constants::MarginTight - 52, mRect.position.y});
+	constexpr int columnWidth{52};
+	const auto iconRowHeight = static_cast<int>(RobotIconSize) + constants::MarginTight;
+
+	mRobots.position(mRect.crossXPoint() - NAS2D::Vector{columnWidth, 0});
+	mConnections.position({mRobots.position().x - constants::MarginTight - columnWidth, mRect.position.y});
+	mMinerRobot.position({mConnections.position().x, mConnections.position().y + iconRowHeight});
 	mStructures.position(mRect.position);
 
-	mRobots.size({52, mRect.size.y});
-	mConnections.size({52, mRect.size.y});
-	mStructures.size({mRect.size.x - 52 * 2 - constants::MarginTight * 2, mRect.size.y});
+	mConnections.size({columnWidth, iconRowHeight});
+	mMinerRobot.size({columnWidth, iconRowHeight});
+	mRobots.size({columnWidth, mRect.size.y});
+	mStructures.size({mRect.size.x - columnWidth * 3 - constants::MarginTight * 2, mRect.size.y});
 }

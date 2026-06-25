@@ -25,6 +25,7 @@ public:
 
 	IconGrid& structures() { return mStructures; }
 	IconGrid& tubes() { return mConnections; }
+	IconGrid& minerRobot() { return mMinerRobot; }
 	IconGrid& robots() { return mRobots; }
 
 	void setStructureIds(const std::vector<StructureID>& structureIds);
@@ -42,12 +43,14 @@ public:
 	void clearBuildMode();
 	void clearSelections();
 	bool selectRobot(RobotTypeIndex robotTypeIndex);
+	bool selectStructure(StructureID structureId);
 
 	using ControlContainer::update;
 
 protected:
 	void onStructuresSelectionChange(const IconGridItem* item);
 	void onConnectionsSelectionChange(const IconGridItem* item);
+	void onMinerRobotSelectionChange(const IconGridItem* item);
 	void onRobotsSelectionChange(const IconGridItem* item);
 	void onResize() override;
 
@@ -58,6 +61,7 @@ public:
 	StructureID mCurrentStructure;
 	RobotTypeIndex mCurrentRobot;
 	IconGrid mStructures;
-	IconGrid mRobots;
 	IconGrid mConnections;
+	IconGrid mMinerRobot;
+	IconGrid mRobots;
 };
