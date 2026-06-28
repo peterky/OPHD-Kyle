@@ -195,6 +195,8 @@ namespace
 
 void MapViewState::save(SavedGameFile& savedGameFile, bool showOverlay)
 {
+	mRobotPool.reclaimStuckDozers();
+
 	if (showOverlay)
 	{
 		auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();

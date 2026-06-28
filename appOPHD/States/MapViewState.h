@@ -113,6 +113,7 @@ public:
 	State* update() override;
 
 	void save(SavedGameFile&, bool showOverlay = true);
+	void prepareShutdown();
 
 	/** Dismisses the topmost popup, or opens the system menu when nothing else is open. Bound to Esc. */
 	void handleEscapeKey();

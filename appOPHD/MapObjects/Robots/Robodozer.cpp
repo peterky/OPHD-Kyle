@@ -64,6 +64,9 @@ void Robodozer::startTask(Tile& tile, int turns)
 void Robodozer::abortTask()
 {
 	Robot::abortTask();
+
+	if (!hasAssignedTile()) { return; }
+
 	tile().index(static_cast<TerrainType>(mTileIndex));
 }
 

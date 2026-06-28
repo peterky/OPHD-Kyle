@@ -271,11 +271,18 @@ MapViewState::MapViewState(GameState& gameState, const PlanetAttributes& planetA
 }
 
 
+void MapViewState::prepareShutdown()
+{
+	mRobotPool.reclaimStuckDozers();
+	mRobotPool.removeDeployedRobots();
+}
+
+
 MapViewState::~MapViewState()
 {
 	ColonyDiagnostics::endSession();
 
-	mRobotPool.removeDeployedRobots();
+	prepareShutdown();
 
 	setCursor(PointerType::Normal);
 
@@ -1633,6 +1640,8 @@ void MapViewState::reconcileDeployedRobots()
 
 			if (robot->idle() || robot->isDead())
 			{
+				if (robot->taskCanceled() && robot->hasAssignedTile()) { robot->abortTask(); }
+
 				tile.removeMapObject();
 				robot->detachFromTile();
 				continue;
@@ -1677,7 +1686,8 @@ void MapViewState::updateRobots()
 			else if (robot.type() != RobotTypeIndex::Miner && robot.type() != RobotTypeIndex::Explorer)
 			{
 				onRobotBreakDown(robot, taskLocation);
-				robot.abortTask();
+
+				if (robot.hasAssignedTile()) { robot.abortTask(); }
 			}
 
 			robot.detachFromTile();

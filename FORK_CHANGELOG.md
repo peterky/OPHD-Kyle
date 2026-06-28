@@ -4,6 +4,13 @@ Changes in this fork relative to upstream [OutpostHD v0.8.10](https://github.com
 
 Version strings appear on the main menu as `v0.8.10-kyle.N`.
 
+## [kyle.18] — 2026-06-27
+
+### Fixed
+- Autosave and quit crash when deployed dozers were in a detached or stale state (`Robot must be placed`)
+- Robodozer `abortTask()` and breakdown handling no longer require a map tile after work completes
+- Save serialization reads robot coordinates directly instead of throwing on edge-case placement state
+
 ## [kyle.17] — 2026-06-27
 
 ### Fixed

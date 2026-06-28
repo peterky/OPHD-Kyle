@@ -63,6 +63,7 @@ GameState::GameState(const PlanetAttributes& planetAttributes, Difficulty select
 
 GameState::~GameState()
 {
+	mMapViewState.prepareShutdown();
 	mStructureManager.removeAllStructures();
 
 	auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();

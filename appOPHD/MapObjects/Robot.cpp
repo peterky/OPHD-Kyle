@@ -192,9 +192,9 @@ NAS2D::Dictionary Robot::getDataDict() const
 		{"production", mTurnsToCompleteTask},
 	}};
 
-	if (isPlaced())
+	if (mTile != nullptr)
 	{
-		const auto location = mapCoordinate();
+		const auto& location = mTile->xyz();
 		dictionary += NAS2D::Dictionary{{
 			{"x", location.xy.x},
 			{"y", location.xy.y},
