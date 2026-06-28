@@ -4,6 +4,12 @@ Changes in this fork relative to upstream [OutpostHD v0.8.10](https://github.com
 
 Version strings appear on the main menu as `v0.8.10-kyle.N`.
 
+## [kyle.17] — 2026-06-27
+
+### Fixed
+- Turn-end and quit crash when canceling robodozer tasks (`abortTask()` called after `detachFromTile()`)
+- Session teardown no longer assumes every deployed robot still has a map tile
+
 ## [kyle.16] — 2026-06-24
 
 ### Added

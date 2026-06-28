@@ -4,7 +4,7 @@ An unofficial personal fork of [OutpostHD](https://github.com/OutpostUniverse/OP
 
 **This is not an official [Outpost Universe](http://forum.outpost2.net) release.** For the original project, its maintainers, and official builds, see [OutpostUniverse/OPHD](https://github.com/OutpostUniverse/OPHD).
 
-Current fork version: **v0.8.10-kyle.16** (shown on the main menu in-game).
+Current fork version: **v0.8.10-kyle.17** (shown on the main menu in-game).
 
 ## Download & play
 

@@ -217,6 +217,7 @@ void Robot::processTurn(TileMap& tileMap, StructureManager& structureManager)
 	if (mCancelTask)
 	{
 		mTurnsToCompleteTask = 0;
+		abortTask();
 		detachFromTile();
 		return;
 	}

@@ -1688,11 +1688,11 @@ void MapViewState::updateRobots()
 		}
 		else if (robot.idle())
 		{
-			robot.detachFromTile();
-
 			if (robot.taskCanceled())
 			{
-				robot.abortTask();
+				if (robot.hasAssignedTile()) { robot.abortTask(); }
+
+				robot.detachFromTile();
 				populateRobotMenu();
 				robot.reset();
 
@@ -1700,6 +1700,7 @@ void MapViewState::updateRobots()
 			}
 			else
 			{
+				robot.detachFromTile();
 				onRobotTaskComplete(robot, taskLocation);
 			}
 		}

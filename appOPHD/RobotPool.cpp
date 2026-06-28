@@ -111,7 +111,7 @@ void RobotPool::removeDeployedRobots()
 {
 	for (auto* robot : mDeployedRobots)
 	{
-		robot->tile().removeMapObject();
+		robot->detachFromTile();
 	}
 }
 
