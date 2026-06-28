@@ -23,11 +23,12 @@ Save games: `%AppData%\LairWorks\OutpostHD\savegames\`
 
 See **[FORK_CHANGELOG.md](FORK_CHANGELOG.md)** for a version-by-version list. Highlights:
 
-- Workforce, maintenance, and production reporting (F10 reports)
+- **Remote Construction Links** — build structures within Communications Tower range (not only Command Center range)
+- Workforce, maintenance, and production reporting
 - Explorer robot deposit discovery and related research tweaks
 - Robodozer overhaul: multi-turn terrain clearing, placement queue, save repair
 - UI fixes: status panel icons, robot toolbar layout, save/load timestamps and sorting
-- Bug fixes for turn-end crashes, mine-under-tube discovery, and dozer queue spam
+- Stability fixes through kyle.18 for dozer turn-end, autosave, quit, and cancel crashes
 
 Discussion for this fork: [Outpost2 forum thread (topic 6455)](https://forum.outpost2.net/index.php/topic,6455.0.html)
 
