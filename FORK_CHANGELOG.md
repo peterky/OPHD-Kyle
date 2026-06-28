@@ -4,6 +4,11 @@ Changes in this fork relative to upstream [OutpostHD v0.8.10](https://github.com
 
 Version strings appear on the main menu as `v0.8.10-kyle.N`.
 
+## [kyle.16] — 2026-06-24
+
+### Added
+- **Remote Construction Links** research (Hot Lab / Physics, cost 40, no prerequisites) — structures can be built within Communications Tower range, not only Command Center range
+
 ## [kyle.15] — 2026-06-24
 
 ### Fixed

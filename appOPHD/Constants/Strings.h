@@ -15,7 +15,7 @@ namespace constants
 	// =====================================
 	// = MISCELLANEOUS
 	// =====================================
-	const std::string Version = "v0.8.10-kyle.15";
+	const std::string Version = "v0.8.10-kyle.16";
 
 	const std::string TileBulldozed = "Bulldozed";
 	const std::string TileClear = "Clear";
@@ -195,6 +195,7 @@ namespace constants
 	const std::string AlertLanderCommRange = "Landers must be placed within communications range.";
 
 	const std::string AlertStructureOutOfRange = "Cannot build structures outside of Command Center communications range.";
+	const std::string AlertStructureOutOfCommRange = "Cannot build structures outside of communications range. Research Remote Construction Links or build within Command Center range.";
 	const std::string AlertStructureTileObstructed = "The selected tile already has a structure on it. You must bulldoze the existing structure in order to build here.";
 	const std::string AlertStructureTileMapObject = "The selected tile is occupied by another object.";
 	const std::string AlertStructureTerrain = "The selected tile is not bulldozed. Structures can only be built on bulldozed tiles.";

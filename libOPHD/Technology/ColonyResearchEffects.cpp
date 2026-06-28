@@ -66,6 +66,7 @@ namespace
 		else if (unlock.value == "legged_robots_rough_terrain" || unlock.value == "placeholder_or_maybe_let_dozers_do_that?") { effects.leggedRobotsUnlocked = true; effects.robotTaskSpeedBonus += 0.10f; }
 		else if (unlock.value == "humanoid_worker") { effects.factoryProductionSpeedBonus += 0.10f; }
 		else if (unlock.value == "RID_EXPLORER_BOT") { effects.explorerBotUnlocked = true; }
+		else if (unlock.value == "comm_tower_build_range") { effects.commTowerBuildRange = true; }
 	}
 
 

@@ -965,9 +965,16 @@ void MapViewState::placeStructure(Tile& tile, StructureID structureID)
 	if (structureID == StructureID::None) { throw std::runtime_error("MapViewState::placeStructure() called but structureID == STRUCTURE_NONE"); }
 
 	const auto isSelfSustained = StructureCatalog::getType(structureID).isSelfSustained;
-	if (!isSelfSustained && !mStructureManager.isInCcRange(tile.xy()))
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	const auto inBuildRange = researchEffects.commTowerBuildRange ?
+		mStructureManager.isInCommRange(tile.xy()) :
+		mStructureManager.isInCcRange(tile.xy());
+	if (!isSelfSustained && !inBuildRange)
 	{
-		doAlertMessage(constants::AlertInvalidStructureAction, constants::AlertStructureOutOfRange);
+		const auto& alertMessage = researchEffects.commTowerBuildRange ?
+			constants::AlertStructureOutOfCommRange :
+			constants::AlertStructureOutOfRange;
+		doAlertMessage(constants::AlertInvalidStructureAction, alertMessage);
 		return;
 	}
 
@@ -1044,7 +1051,6 @@ void MapViewState::placeStructure(Tile& tile, StructureID structureID)
 		}
 
 		// Check build cost
-		const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
 		if (researchEffects.adjustedBuildCost(StructureCatalog::costToBuild(structureID)) > mResourcesCount)
 		{
 			resourceShortageMessage(mResourcesCount, structureID);

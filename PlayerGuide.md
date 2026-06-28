@@ -92,7 +92,7 @@ You can extend your communications range by building Communications Towers on th
 
 **Q: I've built Comm. Towers far away from my colony but I can't place structures, only robots. Why?**
 
-A: Structures must be built within the comm range of a Command Center. This is the large comm circle on your minimap.
+A: By default, structures must be built within Command Center range (~15 tiles). Research **Remote Construction Links** (Hot Laboratory, Physics) to authorize construction anywhere within an operational Communications Tower's range. Until then, use trucks to haul ore from remote mines back to smelters near your Command Center.
 
 **Q: I have a question that's not answered here. How can I get help?**
 
