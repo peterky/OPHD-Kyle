@@ -18,9 +18,8 @@ ophd
 # Vcpkg
 vcpkg_installed/
 
-# Windows - Visual Studio
+# Windows - Visual Studio (avoid "Release/" — it matches release/ on Windows)
 Temporary/
-Release/
 Debug/
 x64/
 .vs/
