@@ -11,8 +11,6 @@ public:
 protected:
 	void think() override;
 
-	void disabledStateSet() override;
-
 private:
 	bool isStorageFull();
 };

@@ -6,6 +6,7 @@
 #include "WindowEventWrapper.h"
 #include "PointerType.h"
 
+#include "ColonyDiagnostics.h"
 #include "States/GameState.h"
 #include "States/SplashState.h"
 #include "States/MainMenuState.h"
@@ -22,6 +23,7 @@
 #include <NAS2D/Resource/ResourceCache.h>
 #include <NAS2D/Mixer/MixerSDL.h>
 #include <NAS2D/Mixer/MixerNull.h>
+#include <NAS2D/EnumKeyCode.h>
 #include <NAS2D/Renderer/RendererOpenGL.h>
 
 #include <SDL2/SDL.h>
@@ -75,6 +77,8 @@ int main(int argc, char *argv[])
 
 		filesystem.makeDirectory(NAS2D::VirtualPath{constants::SaveGamePath});
 
+		ColonyDiagnostics::initialize();
+
 		NAS2D::Configuration& cf = NAS2D::Utility<NAS2D::Configuration>::init(
 			std::map<std::string, NAS2D::Dictionary>{
 				{
@@ -103,6 +107,17 @@ int main(int argc, char *argv[])
 					NAS2D::Dictionary{{
 						{"skip-splash", false},
 						{"maximized", true}
+					}}
+				},
+				{
+					"game",
+					NAS2D::Dictionary{{
+						{"autosave-enabled", false},
+						{"autosave-interval-turns", 10},
+						{"key-digger", static_cast<int>(NAS2D::KeyCode::G)},
+						{"key-dozer", static_cast<int>(NAS2D::KeyCode::Z)},
+						{"key-miner", static_cast<int>(NAS2D::KeyCode::M)},
+						{"key-place-robot", static_cast<int>(NAS2D::KeyCode::Space)}
 					}}
 				}
 			}
@@ -189,10 +204,13 @@ int main(int argc, char *argv[])
 		}
 
 		cf.save("config.xml"); // force configuration to save any changes.
+		ColonyDiagnostics::shutdown(true);
 	}
 	catch(const std::exception& e)
 	{
+		ColonyDiagnostics::logEvent(std::string{"Caught exception: "} + e.what());
 		doNonFatalErrorMessage("Application Error", e.what());
+		ColonyDiagnostics::shutdown(false);
 	}
 
 	getImageCache().clear();

@@ -7,9 +7,11 @@
 #include "../States/MapViewStateHelper.h"
 
 #include "../StructureManager.h"
+#include "../ColonyFoodForecast.h"
 
 #include <libOPHD/StorableResources.h>
 #include <libOPHD/Population/PopulationModel.h>
+#include <libOPHD/Population/PopulationPool.h>
 #include <libOPHD/Population/Morale.h>
 
 #include <NAS2D/EnumMouseButton.h>
@@ -68,13 +70,22 @@ namespace
 }
 
 
-ResourceInfoBar::ResourceInfoBar(const StorableResources& resources, const StructureManager& structureManager, const PopulationModel& population, const Morale& morale, const int& food) :
+ResourceInfoBar::ResourceInfoBar(
+	const StorableResources& resources,
+	const StructureManager& structureManager,
+	const PopulationModel& population,
+	const PopulationPool& populationPool,
+	const Morale& morale,
+	const int& food,
+	const ColonyFoodForecast& foodForecast) :
 	ControlContainer{{&mToolTip}},
 	mResourcesCount{resources},
 	mStructureManager{structureManager},
 	mPopulationModel{population},
+	mPopulationPool{populationPool},
 	mMorale{morale},
 	mFood{food},
+	mFoodForecast{foodForecast},
 	mUiIcons{getImage("ui/icons.png")}
 {
 	const auto fontHeight = Control::getDefaultFont().height();
@@ -127,9 +138,52 @@ bool ResourceInfoBar::isPopulationPanelVisible() const
 	return mPinPopulationPanel || mHoverPopulationPanel;
 }
 
+
+bool ResourceInfoBar::hasDetailPanelVisible() const
+{
+	return isResourcePanelVisible() || isPopulationPanelVisible();
+}
+
+
+void ResourceInfoBar::dismissDetailPanels()
+{
+	mPinResourcePanel = false;
+	mPinPopulationPanel = false;
+	mHoverResourcePanel = false;
+	mHoverPopulationPanel = false;
+}
+
+
 void ResourceInfoBar::ignoreGlow(const bool ignore)
 {
 	mIgnoreGlow = ignore;
+}
+
+
+void ResourceInfoBar::refreshTooltips()
+{
+	const auto formatNet = [](const int net)
+	{
+		if (net > 0) { return "+" + std::to_string(net); }
+		if (net < 0) { return std::to_string(net); }
+		return std::string("0");
+	};
+
+	const auto foodTooltip =
+		constants::ToolTipFoodStorage + "\n"
+		+ "Produces " + std::to_string(mFoodForecast.productionPerTurn) + " / turn, "
+		+ "consumes " + std::to_string(mFoodForecast.consumptionPerTurn) + " / turn "
+		+ "(net " + formatNet(mFoodForecast.netPerTurn) + " / turn). "
+		+ "Each food unit feeds 10 colonists.";
+
+	const auto populationTooltip =
+		constants::ToolTipPopulation + "\n"
+		+ "Available workers: " + std::to_string(mPopulationPool.availableWorkers()) + ", "
+		+ "available scientists: " + std::to_string(mPopulationPool.availableScientists()) + ".";
+
+	mToolTip.add(mTooltipFoodStorage, foodTooltip);
+	mToolTip.add(mTooltipPopulation, populationTooltip);
+	mToolTip.add(mTooltipResourceStorage, constants::ToolTipResourceStorage);
 }
 
 
@@ -205,8 +259,19 @@ void ResourceInfoBar::draw(NAS2D::Renderer& renderer) const
 	{
 		drawIcon(position, imageRect);
 		const auto color = (isHighlighted  && !mIgnoreGlow) ? glowColor : NAS2D::Color::White;
-		const auto text = std::to_string(parts) + " / " + std::to_string(total);
-		renderer.drawText(font, text, position + textOffset, color);
+		auto text = std::to_string(parts) + " / " + std::to_string(total);
+		if (imageRect == foodIconRect)
+		{
+			const auto net = mFoodForecast.netPerTurn;
+			if (net != 0)
+			{
+				text += (net > 0 ? " (+" : " (") + std::to_string(net) + ")";
+			}
+		}
+		const auto textColor = (imageRect == foodIconRect && mFoodForecast.netPerTurn < 0 && !mIgnoreGlow) ?
+			NAS2D::Color{255, glowIntensity, glowIntensity} :
+			color;
+		renderer.drawText(font, text, position + textOffset, textColor);
 		position.x += (x + offsetX) * 2;
 	}
 
@@ -220,7 +285,21 @@ void ResourceInfoBar::draw(NAS2D::Renderer& renderer) const
 	const auto moraleLevel = (std::clamp(mMorale.currentMorale(), 1, 999) / 200);
 	const auto popMoraleImageRect = NAS2D::Rectangle<int>{{176 + moraleLevel * constants::ResourceIconSize, 0}, {constants::ResourceIconSize, constants::ResourceIconSize}};
 	drawIcon(position, popMoraleImageRect);
-	renderer.drawText(font, std::to_string(mPopulationModel.getPopulations().size()), position + textOffset, NAS2D::Color::White);
+	const auto populationCount = std::to_string(mPopulationModel.getPopulations().size());
+	renderer.drawText(font, populationCount, position + textOffset, NAS2D::Color::White);
+
+	const auto availableWorkers = mPopulationPool.availableWorkers();
+	const auto availableScientists = mPopulationPool.availableScientists();
+	const auto workforceText = " W" + std::to_string(availableWorkers) + " S" + std::to_string(availableScientists);
+	const auto workforceColor =
+		(availableWorkers < 0 || availableScientists < 0) ? NAS2D::Color::Red :
+		(availableWorkers == 0 && availableScientists == 0) ? NAS2D::Color{180, 180, 180} :
+		NAS2D::Color{140, 220, 140};
+	const auto workforceOffset = NAS2D::Vector{
+		constants::ResourceIconSize + constants::Margin + font.width(populationCount),
+		textOffset.y
+	};
+	renderer.drawText(font, workforceText, position + workforceOffset, workforceColor);
 }
 
 

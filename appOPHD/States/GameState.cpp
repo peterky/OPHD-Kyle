@@ -132,6 +132,9 @@ void GameState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*rep
 			case NAS2D::KeyCode::F7: return ReportsState::ReportPanel::Mines;
 			case NAS2D::KeyCode::F8: return ReportsState::ReportPanel::Production;
 			case NAS2D::KeyCode::F9: return ReportsState::ReportPanel::Maintenance;
+			case NAS2D::KeyCode::F10: return ReportsState::ReportPanel::Workforce;
+			case NAS2D::KeyCode::F11: return ReportsState::ReportPanel::Satellites;
+			case NAS2D::KeyCode::F12: return ReportsState::ReportPanel::Spaceports;
 			default: return std::nullopt;
 			}
 		};
@@ -143,7 +146,7 @@ void GameState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*rep
 		}
 	}
 
-	if (key == NAS2D::KeyCode::F12)
+	if (key == NAS2D::KeyCode::F12 && mActiveState != &mReportsState)
 	{
 		auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();
 		if (eventHandler.control(mod) && eventHandler.shift(mod))

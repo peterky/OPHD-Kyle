@@ -2,6 +2,7 @@
 
 #include <libOPHD/EnumStructureID.h>
 #include <libOPHD/EnumIdleReason.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <algorithm>
 
@@ -14,20 +15,25 @@ Agridome::Agridome(Tile& tile) :
 
 void Agridome::think()
 {
+	if (isIdle() && idleReason() == IdleReason::InternalStorageFull && !isStorageFull())
+	{
+		enable();
+	}
+
 	if (isIdle()) { return; }
 
-	mFoodLevel = std::clamp(mFoodLevel + foodProduced(), 0, foodStorageCapacity());
+	auto foodProduction = foodProduced();
+	if (const auto* researchEffects = activeResearchEffects())
+	{
+		foodProduction = researchEffects->adjustedFoodProduction(foodProduction);
+	}
+
+	mFoodLevel = std::clamp(mFoodLevel + foodProduction, 0, foodStorageCapacity());
 
 	if (isStorageFull())
 	{
 		idle(IdleReason::InternalStorageFull);
 	}
-}
-
-
-void Agridome::disabledStateSet()
-{
-	mFoodLevel = 0;
 }
 
 

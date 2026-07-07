@@ -393,10 +393,6 @@ void Structure::incrementAge()
 	{
 		onConstructionComplete();
 	}
-	else if (ages() && (age() >= maxAge()))
-	{
-		destroy();
-	}
 }
 
 

@@ -64,9 +64,9 @@ FactoryReport::FactoryReport(const StructureManager& structureManager, TakeMeThe
 	fontMedium{getFontMedium()},
 	fontMediumBold{getFontMediumBold()},
 	fontBigBold{getFontHugeBold()},
-	factorySeed{getImage("ui/interface/factory_seed.png")},
-	factoryAboveGround{getImage("ui/interface/factory_ag.png")},
-	factoryUnderGround{getImage("ui/interface/factory_ug.png")},
+	factorySeed{getImage("structures/seed_1.png")},
+	factoryAboveGround{getImage("structures/factory_surface.png")},
+	factoryUnderGround{getImage("structures/factory_underground.png")},
 	btnShowAll{"All", viewFilterButtonSize, {this, &FactoryReport::onShowAll}},
 	btnShowSurface{"Surface", viewFilterButtonSize, {this, &FactoryReport::onShowSurface}},
 	btnShowUnderground{"Underground", viewFilterButtonSize, {this, &FactoryReport::onShowUnderground}},
@@ -83,7 +83,7 @@ FactoryReport::FactoryReport(const StructureManager& structureManager, TakeMeThe
 	mTxtProductDescription{constants::PrimaryTextColor},
 	selectedProductType{ProductType::PRODUCT_NONE}
 {
-	add(lstFactoryList, {10, viewFilterOriginRow2.y + viewFilterButtonSize.y + 10});
+	add(lstFactoryList, {10, viewFilterOriginRow2.y + viewFilterButtonSize.y + 44});
 
 	add(btnShowAll, viewFilterOriginRow1);
 	btnShowAll.type(Button::Type::Toggle);
@@ -104,17 +104,16 @@ FactoryReport::FactoryReport(const StructureManager& structureManager, TakeMeThe
 	add(btnShowDisabled, viewFilterOriginRow2 + viewFilterSpacing * 2);
 	btnShowDisabled.type(Button::Type::Toggle);
 
-	const auto positionX = NAS2D::Utility<NAS2D::Renderer>::get().size().x - 110;
-	add(btnIdle, {positionX, 35});
+	add(btnIdle, {0, 0});
 	btnIdle.type(Button::Type::Toggle);
 
-	add(btnClearProduction, {positionX, 75});
+	add(btnClearProduction, {0, 0});
 
-	add(btnTakeMeThere, {positionX, 115});
+	add(btnTakeMeThere, {0, 0});
 
 	add(btnApply, {0, 0});
 
-	add(cboFilterByProduct, {330, viewFilterOriginRow2.y});
+	add(cboFilterByProduct, {10, viewFilterOriginRow2.y + viewFilterButtonSize.y + 10});
 	cboFilterByProduct.size({120, viewFilterButtonSize.y});
 
 	cboFilterByProduct.maxDisplayItems(10);
@@ -128,7 +127,7 @@ FactoryReport::FactoryReport(const StructureManager& structureManager, TakeMeThe
 	cboFilterByProduct.addItem(constants::Robominer, ProductType::PRODUCT_MINER);
 	cboFilterByProduct.addItem(constants::Truck, ProductType::PRODUCT_TRUCK);
 
-	add(lstProducts, {cboFilterByProduct.area().position.x + cboFilterByProduct.area().size.x + 20, mRect.position.y + 230});
+	add(lstProducts, {10, 10});
 
 	mTxtProductDescription.height(260);
 
@@ -267,26 +266,37 @@ void FactoryReport::onResize()
 {
 	Control::onResize();
 
-	const auto comboEndPoint = cboFilterByProduct.area().endPoint();
+	const auto centerX = area().center().x;
+	const auto leftWidth = centerX - 20;
+	const auto filterBlockBottom = viewFilterOriginRow2.y + viewFilterButtonSize.y + 10;
 
-	lstFactoryList.size({comboEndPoint.x - 10, mRect.position.y + mRect.size.y - lstFactoryList.position().y - 10});
+	cboFilterByProduct.position({10, filterBlockBottom});
+	lstFactoryList.position({10, filterBlockBottom + viewFilterButtonSize.y + 8});
+	lstFactoryList.size({leftWidth, std::max(100, area().endPoint().y - lstFactoryList.position().y - 10)});
 
-	detailPanelRect = {
-		{ comboEndPoint.x + 20, area().position.y + 10},
-		{area().size.x - comboEndPoint.x - 30, area().position.y + mRect.size.y - 69}
+	detailPanelRect =
+	{
+		{centerX + 10, area().position.y + 10},
+		{area().size.x - centerX - 20, area().size.y - 20}
 	};
 
-	int positionX = mRect.size.x - 150;
-	btnIdle.position({positionX, btnIdle.position().y});
-	btnClearProduction.position({positionX, btnClearProduction.position().y});
-	btnTakeMeThere.position({positionX, btnTakeMeThere.position().y});
+	const auto actionX = detailPanelRect.endPoint().x - mainButtonSize.x;
+	btnIdle.position({actionX, detailPanelRect.position.y + 8});
+	btnClearProduction.position({actionX, detailPanelRect.position.y + 48});
+	btnTakeMeThere.position({actionX, detailPanelRect.position.y + 88});
+	btnApply.position({actionX, detailPanelRect.endPoint().y - mainButtonSize.y - 8});
 
-	btnApply.position({positionX, mRect.size.y + 8});
+	const auto productListWidth = std::max(detailPanelRect.size.x / 3, 160);
+	const auto productSectionTop = detailPanelRect.position.y + 170;
+	const auto productSectionBottom = btnApply.position().y - 12;
+	const auto productSectionHeight = std::max(120, productSectionBottom - productSectionTop);
+	lstProducts.position({detailPanelRect.position.x, productSectionTop});
+	lstProducts.size({productListWidth, productSectionHeight});
 
-	lstProducts.size({detailPanelRect.size.x / 3, detailPanelRect.size.y - 219});
-
-	mTxtProductDescription.position(lstProducts.area().crossXPoint() + NAS2D::Vector{158, 0});
-	mTxtProductDescription.width(mRect.size.x - mTxtProductDescription.position().x - 10);
+	const auto descriptionOrigin = lstProducts.area().crossXPoint() + NAS2D::Vector{16, 0};
+	mTxtProductDescription.position(descriptionOrigin);
+	mTxtProductDescription.width(std::max(120, detailPanelRect.endPoint().x - descriptionOrigin.x - mainButtonSize.x - 16));
+	mTxtProductDescription.height(std::max(80, productSectionHeight));
 }
 
 
@@ -426,6 +436,7 @@ void FactoryReport::onListSelectionChange()
 		}
 	}
 	lstProducts.selectIf([productType = selectedFactory->productType()](const auto& item){ return item.userData == productType; });
+	onProductSelectionChange();
 
 	btnApply.visible(selectedFactory->isOperable());
 }
@@ -449,17 +460,17 @@ void FactoryReport::onProductFilterSelectionChange()
 void FactoryReport::drawDetailPane(NAS2D::Renderer& renderer) const
 {
 	const auto startPoint = detailPanelRect.position;
-	renderer.drawImage(*factoryImage, startPoint + NAS2D::Vector{0, 25});
-	renderer.drawText(fontBigBold, selectedFactory->name(), startPoint + NAS2D::Vector{0, -8}, constants::PrimaryTextColor);
+	renderer.drawText(fontBigBold, selectedFactory->name(), startPoint, constants::PrimaryTextColor);
 
-	auto statusPosition = startPoint + NAS2D::Vector{138, 20};
+	auto statusPosition = startPoint + NAS2D::Vector{0, fontBigBold.height() + constants::MarginTight};
 	renderer.drawText(fontMediumBold, "Status", statusPosition, constants::PrimaryTextColor);
 
 	bool isStatusHighlighted = selectedFactory->disabled() || selectedFactory->destroyed();
 	statusPosition.x += fontMediumBold.width("Status") + 20;
 	renderer.drawText(fontMedium, selectedFactory->stateDescription(), statusPosition, (isStatusHighlighted ? NAS2D::Color::Red : constants::PrimaryTextColor));
 
-	renderer.drawText(fontMediumBold, "Resources Required", startPoint + NAS2D::Vector{138, 60}, constants::PrimaryTextColor);
+	const auto resourcesTitlePosition = startPoint + NAS2D::Vector{0, statusPosition.y + fontMedium.height() + constants::MarginTight * 2};
+	renderer.drawText(fontMediumBold, "Resources Required", resourcesTitlePosition, constants::PrimaryTextColor);
 
 	const auto labelWidth = fontMediumBold.width("Resources Required");
 
@@ -471,7 +482,7 @@ void FactoryReport::drawDetailPane(NAS2D::Renderer& renderer) const
 		std::pair{ResourceNamesRefined[2], productionCost.resourceCost.resources[2]},
 		std::pair{ResourceNamesRefined[3], productionCost.resourceCost.resources[3]},
 	};
-	auto position = startPoint + NAS2D::Vector{138, 80};
+	auto position = resourcesTitlePosition + NAS2D::Vector{0, fontMediumBold.height() + constants::MarginTight};
 	for (auto [title, value] : requiredResources)
 	{
 		drawLabelAndValueLeftJustify(position, labelWidth, title, std::to_string(value), constants::PrimaryTextColor);
@@ -489,28 +500,32 @@ void FactoryReport::drawDetailPane(NAS2D::Renderer& renderer) const
 
 void FactoryReport::drawProductPane(NAS2D::Renderer& renderer) const
 {
-	const auto originLeft = detailPanelRect.position + NAS2D::Vector{0, 180};
+	const auto originLeft = NAS2D::Point{detailPanelRect.position.x, lstProducts.position().y};
 	renderer.drawText(fontBigBold, "Production", originLeft, constants::PrimaryTextColor);
 
-	const auto originRight = originLeft + NAS2D::Vector{lstProducts.size().x + 20, 0};
+	const auto originRight = originLeft + NAS2D::Vector{lstProducts.size().x + 16, 0};
 
-	if (selectedProductType != ProductType::PRODUCT_NONE)
+	const auto displayProductType = selectedProductType != ProductType::PRODUCT_NONE ?
+		selectedProductType : selectedFactory->productType();
+
+	if (productTypeInRange(displayProductType))
 	{
-		const auto productImagePosition = NAS2D::Point{originRight.x, lstProducts.position().y};
-		renderer.drawText(fontBigBold, ProductCatalog::get(selectedProductType).name, originRight, constants::PrimaryTextColor);
-		renderer.drawImage(productImage(selectedProductType), productImagePosition);
+		const auto productTitleY = originRight.y + fontBigBold.height() + constants::MarginTight;
+		const auto productImagePosition = NAS2D::Point{originRight.x, productTitleY};
+		renderer.drawText(fontBigBold, ProductCatalog::get(displayProductType).name, originRight, constants::PrimaryTextColor);
+		renderer.drawImage(productImage(displayProductType), productImagePosition);
 		mTxtProductDescription.draw(renderer);
 	}
 
 	if (selectedFactory->productType() == ProductType::PRODUCT_NONE) { return; }
 
-	const auto progressTextPosition = originRight + NAS2D::Vector{0, mRect.size.y - originRight.y - 115};
+	const auto progressTextPosition = originRight + NAS2D::Vector{0, std::max(140, detailPanelRect.endPoint().y - originRight.y - 95)};
 	const auto buildingProductNamePosition = progressTextPosition + NAS2D::Vector{0, 35};
 	renderer.drawText(fontBigBold, "Progress", progressTextPosition, constants::PrimaryTextColor);
 	renderer.drawText(fontMedium, "Building " + ProductCatalog::get(selectedFactory->productType()).name, buildingProductNamePosition, constants::PrimaryTextColor);
 
 	const auto progressBarPosition = buildingProductNamePosition + NAS2D::Vector{0, fontMedium.height()};
-	const auto progressBarSize = NAS2D::Vector{mRect.size.x - originRight.x - 10, 30};
+	const auto progressBarSize = NAS2D::Vector{detailPanelRect.endPoint().x - originRight.x - 10, 30};
 	drawProgressBar(
 		selectedFactory->productionTurnsCompleted(),
 		selectedFactory->productionTurnsToComplete(),
@@ -519,7 +534,7 @@ void FactoryReport::drawProductPane(NAS2D::Renderer& renderer) const
 
 	const auto text = std::to_string(selectedFactory->productionTurnsCompleted()) + " / " + std::to_string(selectedFactory->productionTurnsToComplete());
 	const auto turnsTitlePosition = progressBarPosition + NAS2D::Vector{0, 36};
-	const auto turnsTextPosition = NAS2D::Point{mRect.size.x - fontMedium.width(text) - 10, turnsTitlePosition.y};
+	const auto turnsTextPosition = NAS2D::Point{detailPanelRect.endPoint().x - fontMedium.width(text) - 10, turnsTitlePosition.y};
 	renderer.drawText(fontMediumBold, "Turns", turnsTitlePosition, constants::PrimaryTextColor);
 	renderer.drawText(fontMedium, text, turnsTextPosition, constants::PrimaryTextColor);
 }
@@ -537,8 +552,8 @@ void FactoryReport::draw(NAS2D::Renderer& renderer) const
 {
 	if (!visible()) { return; }
 
-	const auto positionX = cboFilterByProduct.area().position.x + cboFilterByProduct.area().size.x;
-	renderer.drawLine(NAS2D::Point{positionX + 10, mRect.position.y + 10}, NAS2D::Point{positionX + 10, mRect.position.y + mRect.size.y - 10}, constants::PrimaryTextColor);
+	const auto dividerX = area().center().x;
+	renderer.drawLine(NAS2D::Point{dividerX, area().position.y + 10}, NAS2D::Point{dividerX, area().endPoint().y - 10}, constants::PrimaryTextColor);
 	const auto textPosition = cboFilterByProduct.position() + NAS2D::Vector{0, -font.height() - constants::MarginTight};
 	renderer.drawText(font, "Filter by Product", textPosition, constants::PrimaryTextColor);
 

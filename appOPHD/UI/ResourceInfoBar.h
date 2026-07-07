@@ -12,20 +12,33 @@ namespace NAS2D
 	template <typename BaseType> struct Vector;
 }
 
+struct ColonyFoodForecast;
 struct StorableResources;
 class StructureManager;
 class PopulationModel;
+class PopulationPool;
 class Morale;
 
 
 class ResourceInfoBar : public ControlContainer
 {
 public:
-	ResourceInfoBar(const StorableResources& resources, const StructureManager& structureManager, const PopulationModel& population, const Morale& morale, const int& food);
+	ResourceInfoBar(
+		const StorableResources& resources,
+		const StructureManager& structureManager,
+		const PopulationModel& population,
+		const PopulationPool& populationPool,
+		const Morale& morale,
+		const int& food,
+		const ColonyFoodForecast& foodForecast);
 	~ResourceInfoBar() override;
+
+	void refreshTooltips();
 
 	bool isResourcePanelVisible() const;
 	bool isPopulationPanelVisible() const;
+	bool hasDetailPanelVisible() const;
+	void dismissDetailPanels();
 
 	void ignoreGlow(const bool ignore);
 
@@ -40,8 +53,10 @@ private:
 	const StorableResources& mResourcesCount;
 	const StructureManager& mStructureManager;
 	const PopulationModel& mPopulationModel;
+	const PopulationPool& mPopulationPool;
 	const Morale& mMorale;
 	const int& mFood;
+	const ColonyFoodForecast& mFoodForecast;
 
 	const NAS2D::Image& mUiIcons;
 

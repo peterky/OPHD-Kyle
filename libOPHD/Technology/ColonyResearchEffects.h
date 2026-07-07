@@ -41,6 +41,7 @@ struct ColonyResearchEffects
 	bool leggedRobotsUnlocked{false};
 	bool plagueImmunity{false};
 	std::set<std::string> disasterPredictions;
+	std::set<std::string> unlockedSatellites;
 
 	float maintenanceCostMultiplier() const;
 	float structureCostMultiplier() const;
@@ -66,6 +67,7 @@ struct ColonyResearchEffects
 	int adjustedFoodProduction(int baseProduction) const;
 	int adjustedExplorerYield(int baseYield) const;
 	bool hasDisasterPrediction(const std::string& disasterType) const;
+	bool hasSatelliteUnlocked(const std::string& satelliteType) const;
 };
 
 

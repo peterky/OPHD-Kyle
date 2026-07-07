@@ -4,7 +4,7 @@ An unofficial personal fork of [OutpostHD](https://github.com/OutpostUniverse/OP
 
 **This is not an official [Outpost Universe](http://forum.outpost2.net) release.** For the original project, its maintainers, and official builds, see [OutpostUniverse/OPHD](https://github.com/OutpostUniverse/OPHD).
 
-Current fork version: **v0.8.10-kyle.18** (shown on the main menu in-game).
+Current fork version: **v0.8.10-kyle.29** (shown on the main menu in-game).
 
 ## Download & play
 
@@ -23,12 +23,14 @@ Save games: `%AppData%\LairWorks\OutpostHD\savegames\`
 
 See **[FORK_CHANGELOG.md](FORK_CHANGELOG.md)** for a version-by-version list. Highlights:
 
+- **Research Tech Index** — in-game wiki of all technologies, benefits, prerequisites, and unlock chains
+- **Orbital satellites** — research Orbital Mechanics, launch survey satellites from the Spaceports report to discover hidden mines; Deep Scan extends digging depth
 - **Remote Construction Links** — build structures within Communications Tower range (not only Command Center range)
 - Workforce, maintenance, and production reporting
 - Explorer robot deposit discovery and related research tweaks
 - Robodozer overhaul: multi-turn terrain clearing, placement queue, save repair
 - UI fixes: status panel icons, robot toolbar layout, save/load timestamps and sorting
-- Stability fixes through kyle.18 for dozer turn-end, autosave, quit, and cancel crashes
+- Stability fixes through kyle.18 for dozer turn-end, autosave, quit, and cancel crashes (kyle.19 adds satellites on top of that base)
 
 Discussion for this fork: [Outpost2 forum thread (topic 6455)](https://forum.outpost2.net/index.php/topic,6455.0.html)
 
@@ -46,6 +48,12 @@ git submodule update --init
 ### Windows
 
 Open `OPHD.sln` in Visual Studio 2022 and build **Release | x64**. The executable is written to `.build/Release_x64_appOPHD/appOPHD.exe`.
+
+Package a Windows release zip (exe + DLLs + data):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package-win64.ps1 -Version kyle.20
+```
 
 ### Linux / macOS
 

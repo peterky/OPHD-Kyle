@@ -78,6 +78,21 @@ void WindowStack::hide()
 }
 
 
+bool WindowStack::dismissTopmost()
+{
+	for (auto* window : mWindowList)
+	{
+		if (window->visible())
+		{
+			window->hide();
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
 void WindowStack::update()
 {
 	for (auto it = mWindowList.rbegin(); it != mWindowList.rend(); ++it)

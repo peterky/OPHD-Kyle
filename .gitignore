@@ -1,6 +1,12 @@
 # All platforms
 *.log
 
+# Local build outputs and release packages (stored under release/ on Synology)
+dist/
+.build/
+_Debug Pics/
+steam-artwork/
+
 # Linux - Makefile
 /.build/
 *.exe

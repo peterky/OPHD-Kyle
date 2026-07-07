@@ -25,11 +25,22 @@ public:
 	void update() override;
 	void draw(NAS2D::Renderer& renderer) const override;
 
+	void zoomIn();
+	void zoomOut();
+
 protected:
 	void onResize() override;
 	void onMouseMove(NAS2D::Point<int> position, NAS2D::Vector<int> relative);
 
+	void applyViewSizeFromWindow();
+
 	void drawGrid(NAS2D::Renderer& renderer) const;
+
+private:
+	float tileScale() const;
+	NAS2D::Vector<float> scaledTileSize() const;
+	NAS2D::Vector<float> scaledTileDrawSize() const;
+	NAS2D::Vector<float> scaledTileDrawOffset() const;
 
 private:
 	MapView& mMapView;
@@ -39,4 +50,7 @@ private:
 
 	NAS2D::Point<int> mOriginPixelPosition; // Top pixel at top of diamond
 	NAS2D::Point<int> mMouseTilePosition;
+	int mBaseViewSize{0};
+	int mZoomInOffset{0};
+	int mZoomOutOffset{0};
 };

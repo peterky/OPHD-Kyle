@@ -197,6 +197,7 @@ NAS2D::Dictionary Factory::getDataDict() const
 	auto dictionary = Structure::getDataDict();
 	dictionary.set("production_completed", mTurnsCompleted);
 	dictionary.set("production_type", mProduct);
+	dictionary.set("production_waiting", mProductWaiting);
 	return dictionary;
 }
 

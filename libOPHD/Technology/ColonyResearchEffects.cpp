@@ -34,6 +34,12 @@ namespace
 
 	void applyUnlockEffect(const Technology::Unlock& unlock, ColonyResearchEffects& effects)
 	{
+		if (unlock.unlocks == Technology::Unlock::Unlocks::Satellite)
+		{
+			effects.unlockedSatellites.insert(unlock.value);
+			return;
+		}
+
 		if (unlock.unlocks == Technology::Unlock::Unlocks::DisasterPrediction)
 		{
 			effects.disasterPredictions.insert(unlock.value);
@@ -278,6 +284,12 @@ int ColonyResearchEffects::adjustedExplorerYield(int baseYield) const
 bool ColonyResearchEffects::hasDisasterPrediction(const std::string& disasterType) const
 {
 	return disasterPredictions.find(disasterType) != disasterPredictions.end();
+}
+
+
+bool ColonyResearchEffects::hasSatelliteUnlocked(const std::string& satelliteType) const
+{
+	return unlockedSatellites.find(satelliteType) != unlockedSatellites.end();
 }
 
 

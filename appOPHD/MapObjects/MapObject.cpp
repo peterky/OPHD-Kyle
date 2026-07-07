@@ -16,7 +16,7 @@ void MapObject::updateAnimation()
 }
 
 
-void MapObject::draw(NAS2D::Point<int> position) const
+void MapObject::draw(NAS2D::Point<int> position, float scale) const
 {
-	mSprite.draw(position);
+	mSprite.draw(position, scale);
 }

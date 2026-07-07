@@ -7,6 +7,7 @@
 #include "MapViewState.h"
 #include "ColonyShip.h"
 #include "ReportsState.h"
+#include "ResearchStructureUnlocks.h"
 
 #include "MapViewStateHelper.h"
 
@@ -259,6 +260,7 @@ void MapViewState::save(SavedGameFile& savedGameFile, bool showOverlay)
 	}
 	root->linkEndChild(moraleChangeReasons);
 	root->linkEndChild(mProductionHistory.serialize());
+	mOrbitalProgram.serialize(root);
 }
 
 
@@ -333,6 +335,7 @@ void MapViewState::load(SavedGameFile& savedGameFile)
 	updateAllTubeConnectorDir();
 
 	mResearchTracker = readResearch(root->firstChildElement("research"), mTechnologyReader);
+	syncStructureTrackerFromCompletedResearch(mStructureTracker, mResearchTracker, mTechnologyReader);
 
 	mResourceBreakdownPanel.previousResources() = readResources(*root, "prev_resources");
 	readPopulation(root->firstChildElement("population"));
@@ -340,8 +343,10 @@ void MapViewState::load(SavedGameFile& savedGameFile)
 
 	readMoraleChanges(root->firstChildElement("morale_change"));
 	mProductionHistory.deserialize(root->firstChildElement("production_history"));
+	mOrbitalProgram.deserialize(root);
 	mReportsState.injectProductionHistory(mProductionHistory);
 	mReportsState.injectWorkforce(mPopulationModel, mPopulationPool);
+	injectOrbitalReports();
 
 	updateConnectedness();
 

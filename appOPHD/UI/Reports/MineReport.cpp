@@ -16,6 +16,7 @@
 #include "../../Map/Route.h"
 #include "../../Map/Tile.h"
 #include "../../MapObjects/Structures/MineFacility.h"
+#include "../../StructureStatusDescription.h"
 
 #include <libOPHD/MapObjects/OreDeposit.h>
 
@@ -37,6 +38,62 @@ namespace
 		const auto& surfaceLocation = structure.xyz().xy;
 		return structure.name() + " at " + NAS2D::stringFrom(surfaceLocation);
 	}
+
+
+	std::string formatInternalStorage(const MineFacility& mineFacility)
+	{
+		const auto& stored = mineFacility.storage();
+		const auto perTypeCapacity = mineFacility.rawOreStorageCapacity();
+		const auto totalStored = stored.total();
+		const auto totalCapacity = perTypeCapacity * static_cast<int>(stored.resources.size());
+		return std::to_string(totalStored) + " / " + std::to_string(totalCapacity) + " raw ore at mine";
+	}
+
+
+	bool isMineBufferFull(const MineFacility& mineFacility)
+	{
+		return mineFacility.storage().total() >= mineFacility.rawOreStorageCapacity() * static_cast<int>(mineFacility.storage().resources.size());
+	}
+
+
+	int statusPaneContentHeight(const MineFacility& mineFacility, bool routeAvailable, const NAS2D::Font& font, const NAS2D::Font& fontMedium)
+	{
+		auto height = fontMedium.height() + constants::MarginTight + fontMedium.height() + constants::MarginTight * 2;
+
+		if (mineFacility.isIdle())
+		{
+			height += font.height() + constants::MarginTight;
+		}
+
+		if (!mineFacility.destroyed() && !mineFacility.underConstruction())
+		{
+			height += font.height() + constants::MarginTight;
+		}
+
+		if (mineFacility.destroyed() || mineFacility.underConstruction())
+		{
+			return height;
+		}
+
+		height += fontMedium.height() + constants::MarginTight + (font.height() + constants::MarginTight) * 2;
+
+		if (!mineFacility.isOperable())
+		{
+			return height;
+		}
+
+		height += fontMedium.height() + constants::MarginTight + (font.height() + constants::MarginTight) * 2;
+
+		if (!routeAvailable)
+		{
+			height += fontMedium.height() + constants::MarginTight * 2;
+			return height;
+		}
+
+		height += (font.height() + constants::MarginTight) * 3;
+		height += fontMedium.height() + constants::MarginTight + (font.height() + constants::MarginTight) * 2;
+		return height;
+	}
 }
 
 
@@ -48,7 +105,7 @@ MineReport::MineReport(const StructureManager& structureManager, TakeMeThereDele
 	fontMedium{getFontMedium()},
 	fontMediumBold{getFontMediumBold()},
 	fontBigBold{getFontHugeBold()},
-	mineFacilityImage{getImage("ui/interface/mine.png")},
+	mineFacilityImage{getImage("structures/mine_facility.png")},
 	uiIcons{getImage("ui/icons.png")},
 	btnShowAll{"All", {this, &MineReport::onShowAll}},
 	btnShowActive{"Active", {this, &MineReport::onShowActive}},
@@ -238,7 +295,7 @@ void MineReport::onMineFacilitySelectionChange()
 	if (!mSelectedFacility) { return; }
 
 	const auto& mineFacility = *mSelectedFacility;
-	btnIdle.toggle(mineFacility.isIdle());
+	btnIdle.toggle(mineFacility.forceIdle());
 	btnIdle.enabled(mineFacility.isOperable());
 
 	btnDigNewLevel.toggle(mineFacility.extending());
@@ -305,11 +362,10 @@ void MineReport::onRemoveTruck()
 
 void MineReport::drawMineFacilityPane(NAS2D::Renderer& renderer, const NAS2D::Point<int>& origin) const
 {
-	renderer.drawImage(mineFacilityImage, origin);
 	const auto text = mSelectedFacility ? getStructureDescription(*mSelectedFacility) : "";
-	renderer.drawText(fontBigBold, text, origin + NAS2D::Vector{0, -33}, constants::PrimaryTextColor);
+	renderer.drawText(fontBigBold, text, origin, constants::PrimaryTextColor);
 
-	drawStatusPane(renderer, origin + NAS2D::Vector{138, 0});
+	drawStatusPane(renderer, origin + NAS2D::Vector{0, fontBigBold.height() + constants::MarginTight});
 }
 
 
@@ -322,13 +378,44 @@ void MineReport::drawStatusPane(NAS2D::Renderer& renderer, const NAS2D::Point<in
 	const auto statusPosition = origin + NAS2D::Vector{0, fontMediumBold.height() + constants::MarginTight};
 	renderer.drawText(fontMedium, mineFacility.stateDescription(), statusPosition, (isStatusHighlighted ? NAS2D::Color::Red : constants::PrimaryTextColor));
 
+	if (mineFacility.isIdle())
+	{
+		const auto reasonPosition = statusPosition + NAS2D::Vector{0, fontMedium.height() + constants::MarginTight};
+		renderer.drawText(font, structureStatusReason(mineFacility), reasonPosition, NAS2D::Color::Yellow);
+	}
+
+	if (!mineFacility.destroyed() && !mineFacility.underConstruction())
+	{
+		const auto storageLineOffset = mineFacility.isIdle() ?
+			fontMedium.height() + font.height() + constants::MarginTight * 3 :
+			fontMedium.height() + constants::MarginTight * 2;
+		const auto storagePosition = origin + NAS2D::Vector{0, fontMediumBold.height() + storageLineOffset};
+		const auto isBufferFull = isMineBufferFull(mineFacility);
+		renderer.drawText(
+			font,
+			formatInternalStorage(mineFacility),
+			storagePosition,
+			isBufferFull ? NAS2D::Color::Red : constants::PrimaryTextColor
+		);
+	}
+
 	if (mineFacility.destroyed() || mineFacility.underConstruction())
 	{
 		return;
 	}
 
+	auto statusBlockHeight = fontMediumBold.height() + fontMedium.height() + constants::MarginTight * 2;
+	if (mineFacility.isIdle())
+	{
+		statusBlockHeight += font.height() + constants::MarginTight;
+	}
+	if (!mineFacility.destroyed() && !mineFacility.underConstruction())
+	{
+		statusBlockHeight += font.height() + constants::MarginTight;
+	}
+
 	const auto titleSpacing = NAS2D::Vector{0, fontMediumBold.height() + constants::MarginTight};
-	const auto trucksOrigin = origin + NAS2D::Vector{0, fontMediumBold.height() + fontMedium.height() + constants::MarginTight * 2};
+	const auto trucksOrigin = origin + NAS2D::Vector{0, statusBlockHeight};
 	renderer.drawText(fontMediumBold, "Trucks", trucksOrigin, constants::PrimaryTextColor);
 
 	const auto truckValueOrigin = trucksOrigin + titleSpacing;
@@ -357,6 +444,12 @@ void MineReport::drawStatusPane(NAS2D::Renderer& renderer, const NAS2D::Point<in
 	const auto routeOrigin = truckValueOrigin + valueSpacing * 2;
 	renderer.drawText(fontMediumBold, "Route", routeOrigin, constants::PrimaryTextColor);
 
+	if (!mOreHaulRoutes)
+	{
+		renderer.drawText(fontMedium, "Route data unavailable.", routeOrigin + titleSpacing, NAS2D::Color::Yellow);
+		return;
+	}
+
 	bool routeAvailable = mOreHaulRoutes->hasRoute(*mSelectedFacility);
 
 	const auto routeValueOrigin = routeOrigin + titleSpacing;
@@ -370,6 +463,11 @@ void MineReport::drawStatusPane(NAS2D::Renderer& renderer, const NAS2D::Point<in
 
 	if (!routeAvailable)
 	{
+		renderer.drawText(
+			fontMedium,
+			"No path to an operational smelter. Roads help, but routes are blocked by structures, tubes, and deployed robots on the path. Toggle the route overlay to inspect.",
+			routeValueOrigin + NAS2D::Vector{0, valueSpacing.y},
+			NAS2D::Color::Yellow);
 		return;
 	}
 
@@ -390,13 +488,41 @@ void MineReport::drawStatusPane(NAS2D::Renderer& renderer, const NAS2D::Point<in
 		std::to_string(oreHaulCapacity * 4),
 		constants::PrimaryTextColor
 	);
+
+	const auto& route = mOreHaulRoutes->getRoute(mineFacility);
+	const auto& destination = *route.path.back()->structure();
+	const auto haulDestinationOrigin = routeValueOrigin + valueSpacing * 4;
+	renderer.drawText(fontMediumBold, "Haul Destination", haulDestinationOrigin, constants::PrimaryTextColor);
+	const auto haulDestinationValueOrigin = haulDestinationOrigin + titleSpacing;
+	const auto destinationLabel = destination.isWarehouse() ? "Warehouse buffer" : "Smelter";
+	drawLabelAndValueRightJustify(
+		haulDestinationValueOrigin,
+		labelWidth,
+		destinationLabel,
+		destination.name() + " at " + NAS2D::stringFrom(destination.xyz().xy),
+		constants::PrimaryTextColor
+	);
+
+	const auto& destinationOre = destination.isSmelter() ? destination.production() : destination.storage();
+	const auto destinationOreStored = destinationOre.total();
+	const auto destinationOreCapacity = destination.rawOreStorageCapacity() * static_cast<int>(destinationOre.resources.size());
+	const auto destinationOreLabel = destination.isWarehouse() ? "Raw ore at warehouse" : "Raw ore at smelter";
+	drawLabelAndValueRightJustify(
+		haulDestinationValueOrigin + valueSpacing,
+		labelWidth,
+		destinationOreLabel,
+		std::to_string(destinationOreStored) + " / " + std::to_string(destinationOreCapacity),
+		destinationOreStored >= destinationOreCapacity ? NAS2D::Color::Red : constants::PrimaryTextColor
+	);
 }
 
 
 void MineReport::drawOreProductionPane(NAS2D::Renderer& renderer, const NAS2D::Point<int>& origin) const
 {
+	if (!mOreHaulRoutes) { return; }
+
 	renderer.drawText(fontMediumBold, "Ore Production", origin, constants::PrimaryTextColor);
-	const auto panelWidth = renderer.size().x - origin.x - 10;
+	const auto panelWidth = area().endPoint().x - origin.x - 10;
 	drawLabelRightJustify(origin, panelWidth, fontMediumBold, "Haul Capacity", constants::PrimaryTextColor);
 	const auto lineOffset = NAS2D::Vector{0, fontMediumBold.height() + 1};
 	const auto lineOrigin = origin + lineOffset;
@@ -409,7 +535,7 @@ void MineReport::drawOreProductionPane(NAS2D::Renderer& renderer, const NAS2D::P
 	const auto oreHaulCapacity = mOreHaulRoutes->getOreHaulCapacity(*mSelectedFacility);
 
 	auto resourceOffset = lineOffset + NAS2D::Vector{0, 1 + constants::Margin + 2};
-	const auto progressBarSize = NAS2D::Vector{renderer.size().x - origin.x - 10, std::max(25, fontBold.height() + constants::MarginTight * 2)};
+	const auto progressBarSize = NAS2D::Vector{area().endPoint().x - origin.x - 10, std::max(25, fontBold.height() + constants::MarginTight * 2)};
 	for (size_t i = 0; i < 4; ++i)
 	{
 		const auto resourcePosition = origin + resourceOffset;
@@ -438,9 +564,20 @@ void MineReport::drawOreProductionPane(NAS2D::Renderer& renderer, const NAS2D::P
 
 void MineReport::update()
 {
+	if (!visible()) { return; }
+
 	ControlContainer::update();
 	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
 	draw(renderer);
+}
+
+
+int MineReport::statusPaneHeight() const
+{
+	if (!mSelectedFacility || !mOreHaulRoutes) { return 0; }
+
+	const auto routeAvailable = mOreHaulRoutes->hasRoute(*mSelectedFacility);
+	return statusPaneContentHeight(*mSelectedFacility, routeAvailable, font, fontMedium);
 }
 
 
@@ -452,7 +589,14 @@ void MineReport::draw(NAS2D::Renderer& renderer) const
 
 	if (mSelectedFacility)
 	{
-		drawMineFacilityPane(renderer, startPoint + NAS2D::Vector{10, 30});
-		drawOreProductionPane(renderer, startPoint + NAS2D::Vector{10, 260});
+		const auto paneOrigin = startPoint + NAS2D::Vector{10, 30};
+		drawMineFacilityPane(renderer, paneOrigin);
+
+		const auto orePaneOriginY = paneOrigin.y + std::max(130, statusPaneHeight() + 24);
+		const auto orePaneHeight = area().endPoint().y - orePaneOriginY - 12;
+		if (orePaneHeight >= 120)
+		{
+			drawOreProductionPane(renderer, {paneOrigin.x, orePaneOriginY});
+		}
 	}
 }

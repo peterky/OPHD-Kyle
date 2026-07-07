@@ -31,6 +31,12 @@ public:
 
 	void repairStructures(StructureList& structures);
 
+	void beginMaintenanceTurn();
+	int repairsThisTurn() const { return mRepairsThisTurn; }
+	int assignedPersonnelThisTurn() const { return mAssignedPersonnel; }
+	int materialsLevel() const { return mMaterialsLevel; }
+	static constexpr int materialsCapacity() { return 100; }
+
 protected:
 	bool canMakeRepairs() const;
 
@@ -47,6 +53,8 @@ private:
 	int mMaterialsLevel;
 	int mMaintenancePersonnel;
 	int mAssignedPersonnel;
+	int mRepairsThisTurn{0};
+	std::size_t mRoundRobinIndex{0};
 
 	StructureList mPriorityList;
 

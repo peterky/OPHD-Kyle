@@ -15,7 +15,7 @@ namespace constants
 	// =====================================
 	// = MISCELLANEOUS
 	// =====================================
-	const std::string Version = "v0.8.10-kyle.18";
+	const std::string Version = "v0.8.10-kyle.26";
 
 	const std::string TileBulldozed = "Bulldozed";
 	const std::string TileClear = "Clear";
@@ -132,22 +132,22 @@ namespace constants
 	const std::string ToolTipBtnCommRange = "Communications Range Overlay";
 	const std::string ToolTipBtnRoutes = "Ore Haul Routes Overlay";
 	const std::string ToolTipBtnPolice = "Police Coverage Overlay";
-	const std::string ToolTipRefinedResources = "Breakdown of storage levels for Smelted Resources";
-	const std::string ToolTipResourceStorage = "Smelted Resources Storage. Current Level / Capacity";
-	const std::string ToolTipFoodStorage = "Food Storage. Current Level / Capacity";
+	const std::string ToolTipRefinedResources = "Breakdown of smelted (refined) metal stored at tanks and the Command Center";
+	const std::string ToolTipResourceStorage = "Smelted metal storage. Current / capacity. Raw ore lives in mine buffers, smelters, and warehouse ore buffers";
+	const std::string ToolTipFoodStorage = "Food storage. Current / capacity";
 	const std::string ToolTipEnergy = "Energy Availability. Available / Total Production";
-	const std::string ToolTipPopulation = "Population and Morale details";
+	const std::string ToolTipPopulation = "Population and morale. W/S shows free workers and scientists available to staff new structures";
 	const std::string ToolTipCurrentTurns = "Current turn count";
 	const std::string ToolTipSystemMenu = "System Menu (Esc)";
 	const std::string ToolTipMaintenanceDone = "Maintenance this turn. Repaired / still pending / required at turn start";
 	const std::string ToolTipMaintenanceCrew = "Maintenance crew. Assigned this turn / total capacity across facilities";
-	const std::string ToolTipMaintenanceParts = "Maintenance parts in storage. On hand / total capacity across facilities";
+	const std::string ToolTipMaintenanceParts = "Maintenance parts in warehouses plus supplies stocked at maintenance facilities. Recycling plants convert biowaste into parts";
 	const std::string ToolTipRobotCommand = "Robot command capacity. In use / maximum";
 	const std::string ToolTipRobotDigger = "Robodiggers. Available in pool / total built";
 	const std::string ToolTipRobotDozer = "Robodozers. Available in pool / total built";
 	const std::string ToolTipRobotMiner = "Robominers. Available in pool / total built";
 	const std::string ToolTipRobotExplorer = "RoboExplorers. Available in pool / total built";
-	const std::string ToolTipRobotTrucks = "Haul trucks. Available in warehouses / deployed at mines / total";
+	const std::string ToolTipRobotTrucks = "Haul trucks. Available in warehouses / deployed at mines / total. Trucks may haul raw ore to smelters or warehouse buffers";
 
 	// =====================================
 	// = UI STRINGS

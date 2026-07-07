@@ -1,6 +1,7 @@
 #include "OreRefining.h"
 
 #include <libOPHD/EnumIdleReason.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <array>
 
@@ -52,15 +53,23 @@ void OreRefining::think()
 
 void OreRefining::updateProduction()
 {
+	const auto* researchEffects = Structure::activeResearchEffects();
+	const auto smeltingThreshold = researchEffects ?
+		researchEffects->adjustedSmeltingOreThreshold(SmeltingMinimumResourcesCount) :
+		SmeltingMinimumResourcesCount;
+
 	StorableResources converted{0};
 	auto& ore = production();
 
 	for (size_t i = 0; i < ore.resources.size(); ++i)
 	{
-		if (ore.resources[i] >= SmeltingMinimumResourcesCount)
+		if (ore.resources[i] >= smeltingThreshold)
 		{
-			converted.resources[i] = SmeltingMinimumResourcesCount / OreConversionDivisor[i];
-			ore.resources[i] = ore.resources[i] - SmeltingMinimumResourcesCount;
+			const auto baseOutput = SmeltingMinimumResourcesCount / OreConversionDivisor[i];
+			converted.resources[i] = researchEffects ?
+				researchEffects->adjustedSmeltingOutput(baseOutput) :
+				baseOutput;
+			ore.resources[i] = ore.resources[i] - smeltingThreshold;
 		}
 	}
 

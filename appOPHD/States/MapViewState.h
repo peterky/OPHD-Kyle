@@ -25,6 +25,7 @@
 #include "../UI/StructureInspector.h"
 #include "../UI/TileInspector.h"
 #include "../UI/WarehouseInspector.h"
+#include "../ColonyFoodForecast.h"
 #include "../UI/ResourceInfoBar.h"
 #include "../UI/RobotDeploymentSummary.h"
 #include "../UI/MaintenanceTurnSummary.h"
@@ -34,6 +35,7 @@
 #include "../UI/CheatMenu.h"
 
 #include "../ColonyProductionHistory.h"
+#include "../ColonyOrbitalProgram.h"
 
 #include <libOPHD/PlanetAttributes.h>
 #include <libOPHD/StorableResources.h>
@@ -153,6 +155,9 @@ private:
 	void drawUI();
 	void drawSystemButton() const;
 	void drawResearchStatus();
+	void drawColonyGuidance();
+	void drawMapHoverTooltip();
+	void updateColonyFoodForecast();
 
 	// INSERT OBJECT HANDLING
 	void onDeployCargoLander();
@@ -209,6 +214,8 @@ private:
 	void checkWarehouseCapacity();
 	void nextTurn();
 	void skipTurns(int count);
+	void processAutomationCommands();
+	void queueNextAvailableResearch();
 	void recordProductionHistory();
 	void tryAutoSave();
 	void logTurnDiagnostics();
@@ -281,6 +288,10 @@ private:
 	void onDiggerSelectionDialog(Direction direction, Tile& tile);
 
 	void onTakeMeThere(const MapCoordinate& position);
+	void onLaunchSatellite(const std::string& satelliteId);
+	void injectOrbitalReports();
+	void applyDigDepthExtension(int additionalLevels);
+	void syncMineFacilityMaxDepth();
 
 private:
 	Difficulty mDifficulty;
@@ -393,6 +404,7 @@ private:
 	std::vector<std::vector<Tile*>> mPoliceOverlays;
 
 	std::string mResearchStatusText;
+	ColonyFoodForecast mColonyFoodForecast;
 
 	ResourceInfoBar mResourceInfoBar;
 	MaintenanceTurnSummary mMaintenanceTurnSummary;
@@ -400,6 +412,7 @@ private:
 	ColonyMaintenanceTurnStats mMaintenanceTurnStats;
 	SkipTurnsDialog mSkipTurnsDialog;
 	ColonyProductionHistory mProductionHistory;
+	ColonyOrbitalProgram mOrbitalProgram;
 	std::unique_ptr<MiniMap> mMiniMap;
 	std::unique_ptr<DetailMap> mDetailMap;
 	std::unique_ptr<NavControl> mNavControl;

@@ -64,12 +64,13 @@ void NavControl::onMove(NAS2D::Vector<int> displacement)
 
 void NavControl::onClick(NAS2D::Point<int> mousePosition)
 {
+	// Map screen-space directions to isometric tile offsets (matches WASD / arrow keys).
 	const auto directionOptions =
 	{
-		std::tuple{mMoveNorthIconRect, MapOffsetNorth},
-		std::tuple{mMoveSouthIconRect, MapOffsetSouth},
-		std::tuple{mMoveEastIconRect, MapOffsetEast},
-		std::tuple{mMoveWestIconRect, MapOffsetWest},
+		std::tuple{mMoveNorthIconRect, MapOffsetNorthWest},
+		std::tuple{mMoveSouthIconRect, MapOffsetSouthEast},
+		std::tuple{mMoveEastIconRect, MapOffsetNorthEast},
+		std::tuple{mMoveWestIconRect, MapOffsetSouthWest},
 		std::tuple{mMoveUpIconRect, MapOffsetUp},
 		std::tuple{mMoveDownIconRect, MapOffsetDown},
 	};

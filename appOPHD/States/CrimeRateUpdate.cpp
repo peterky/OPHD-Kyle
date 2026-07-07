@@ -9,6 +9,7 @@
 #include <libOPHD/RandomNumberGenerator.h>
 #include <libOPHD/Population/MoraleChangeEntry.h>
 
+#include <algorithm>
 #include <map>
 
 
@@ -23,17 +24,51 @@ namespace
 	};
 
 
-	bool isProtectedByPolice(const std::vector<Structure*>& policeStations, const Structure& structure)
+	enum class PoliceProtection
+	{
+		None,
+		NetworkPatrol,
+		DirectRange
+	};
+
+
+	PoliceProtection policeProtectionLevel(const std::vector<Structure*>& policeStations, const Structure& structure)
 	{
 		const auto& position = structure.xyz();
+		auto protection = PoliceProtection::None;
+
 		for (const auto* policeStation : policeStations)
 		{
+			if (position.z != policeStation->xyz().z) { continue; }
+
 			if (isPointInRangeSameZ(position, policeStation->xyz(), policeStation->policeRange()))
 			{
-				return true;
+				return PoliceProtection::DirectRange;
+			}
+
+			if (protection == PoliceProtection::None &&
+				structure.connected() &&
+				policeStation->connected())
+			{
+				protection = PoliceProtection::NetworkPatrol;
 			}
 		}
-		return false;
+
+		return protection;
+	}
+
+
+	int crimeRateChangeForProtection(PoliceProtection protection, int currentCrimeRate)
+	{
+		switch (protection)
+		{
+		case PoliceProtection::DirectRange:
+			return -std::max(3, currentCrimeRate / 10);
+		case PoliceProtection::NetworkPatrol:
+			return -std::max(2, currentCrimeRate / 20);
+		default:
+			return 1;
+		}
 	}
 }
 
@@ -64,7 +99,8 @@ void CrimeRateUpdate::update()
 	const auto& policeStations = mStructureManager.activePoliceStations();
 	for (auto* structure : structuresWithCrime)
 	{
-		int crimeRateChange = isProtectedByPolice(policeStations, *structure) ? -1 : 1;
+		const auto protection = policeProtectionLevel(policeStations, *structure);
+		const auto crimeRateChange = crimeRateChangeForProtection(protection, structure->crimeRate());
 		structure->increaseCrimeRate(crimeRateChange);
 
 		// Crime Rate of 0% means no crime

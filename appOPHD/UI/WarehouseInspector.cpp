@@ -47,9 +47,17 @@ void WarehouseInspector::drawClientArea(NAS2D::Renderer& /*renderer*/) const
 	const int labelWidth = 100;
 
 	auto position = mRect.position + NAS2D::Vector{constants::Margin, 25};
-	drawLabelAndValueLeftJustify(position, labelWidth, "Storage:", std::to_string(pool.availableStorage()) + " / " + std::to_string(pool.capacity()));
+	drawLabelAndValueLeftJustify(position, labelWidth, "Product Storage:", std::to_string(pool.availableStorage()) + " / " + std::to_string(pool.capacity()));
 
 	position.y += 25;
+
+	if (mWarehouse->rawOreStorageCapacity() > 0)
+	{
+		const auto& rawOre = mWarehouse->storage();
+		const auto rawCapacity = mWarehouse->rawOreStorageCapacity() * static_cast<int>(rawOre.resources.size());
+		drawLabelAndValueLeftJustify(position, labelWidth, "Raw Ore Buffer:", std::to_string(rawOre.total()) + " / " + std::to_string(rawCapacity));
+		position.y += 25;
+	}
 
 	/**
 	 * This could be further improved by caching which products are going to be

@@ -30,7 +30,7 @@ MineOperationsWindow::MineOperationsWindow() :
 	Window{constants::WindowMineOperations},
 	mFont{Control::getDefaultFont()},
 	mFontBold{Control::getDefaultFontBold()},
-	mUiIcon{getImage("ui/interface/mine.png")},
+	mUiIcon{getImage("structures/mine_facility.png")},
 	mIcons{getImage("ui/icons.png")},
 	mPanel{loadRectangleSkin("ui/skin/textbox_normal")},
 	btnIdle{"Idle", {this, &MineOperationsWindow::onIdle}},

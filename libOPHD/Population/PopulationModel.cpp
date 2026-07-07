@@ -12,7 +12,10 @@
 namespace
 {
 	const int studentToScientistRate = 35;
-	const int studentToAdultBase = 190;
+	const int studentToAdultBase = 60;
+	const int graduationDivisorScale = 1;
+	const int nurseryGraduationBonus = 10;
+	const int universityGraduationBonus = 12;
 	const int adultToRetireeBase = 2000;
 
 	const std::array moraleModifierTable{
@@ -41,6 +44,13 @@ const PopulationTable& PopulationModel::getPopulations() const
 }
 
 
+void PopulationModel::setPopulationProgress(const PopulationTable& growth, const PopulationTable& death)
+{
+	mPopulationGrowth = growth;
+	mPopulationDeath = death;
+}
+
+
 void PopulationModel::addPopulation(const PopulationTable& population)
 {
 	mPopulation += population;
@@ -52,22 +62,63 @@ void PopulationModel::removePopulation(const PopulationTable& population)
 }
 
 
+void PopulationModel::setRetrainingRatePerTurn(int rate)
+{
+	mRetrainingRatePerTurn = std::clamp(rate, -50, 50);
+}
+
+
+void PopulationModel::setUniversityScientistPercent(int percent)
+{
+	mUniversityScientistPercent = (percent < 0) ? -1 : std::clamp(percent, 0, 100);
+}
+
+
+void PopulationModel::applyRetraining()
+{
+	mLastRetrainedCount = 0;
+	if (mRetrainingRatePerTurn == 0) { return; }
+
+	if (mRetrainingRatePerTurn > 0)
+	{
+		if (mPopulation.scientist <= 0) { return; }
+
+		mLastRetrainedCount = std::min(mRetrainingRatePerTurn, mPopulation.scientist);
+		mPopulation.scientist -= mLastRetrainedCount;
+		mPopulation.worker += mLastRetrainedCount;
+		return;
+	}
+
+	if (mPopulation.worker <= 0) { return; }
+
+	const auto rate = -mRetrainingRatePerTurn;
+	mLastRetrainedCount = std::min(rate, mPopulation.worker);
+	mPopulation.worker -= mLastRetrainedCount;
+	mPopulation.scientist += mLastRetrainedCount;
+}
+
+
 void PopulationModel::spawnPopulation(int morale, int residences, int nurseries, int universities, float fertilityBonus, float educationEfficiency)
 {
 	const int growthChild = (residences > 0 || nurseries > 0) ?
 		mPopulation.scientist / 4 + mPopulation.worker / 2 : 0;
 
-	// Account for universities
+	// Account for universities and education research
 	const auto effectiveStudentToScientistRate = static_cast<int>(studentToScientistRate * (1.0f + std::min(educationEfficiency, 1.0f)) + 0.5f);
-	const int convertRate = (universities > 0) ? effectiveStudentToScientistRate : 0;
+	const int universityScientistBonus = (universities > 0) ? std::min(25, universities * 3) : 0;
+	const int automaticConvertRate = (universities > 0) ? std::min(70, effectiveStudentToScientistRate + universityScientistBonus) : 0;
+	const int convertRate = (mUniversityScientistPercent >= 0) ? mUniversityScientistPercent : automaticConvertRate;
 	const int growthWorker = mPopulation.student * (100 - convertRate) / 100;
 	const int growthScientist = mPopulation.student * convertRate / 100;
 
 	int totalAdults = mPopulation.worker + mPopulation.scientist;
 
 	int divisorChild = std::max(1, static_cast<int>(moraleModifierTable[moraleIndex(morale)].fertilityRate * (1.0f - std::min(fertilityBonus, 0.95f))));
-	int divisorStudent = ((std::max(mPopulation.adults(), studentToAdultBase) / 40) * 3 + 16) * 4;
-	int divisorAdult = ((std::max(mPopulation.adults(), studentToAdultBase) / 40) * 3 + 45) * 4;
+	int divisorStudent = ((std::max(mPopulation.adults(), studentToAdultBase) / 40) * 3 + 16) * graduationDivisorScale;
+	divisorStudent = std::max(16, divisorStudent - nurseries * nurseryGraduationBonus);
+
+	int divisorAdult = ((std::max(mPopulation.adults(), studentToAdultBase) / 40) * 3 + 45) * graduationDivisorScale;
+	divisorAdult = std::max(20, divisorAdult - universities * universityGraduationBonus);
 	int divisorRetiree = ((std::max(totalAdults, adultToRetireeBase) / 40) * 3 + 40) * 4;
 
 	const auto newRoles = spawnRoles(
@@ -132,7 +183,7 @@ void PopulationModel::killRoles(const PopulationTable& divisor)
 void PopulationModel::killPopulation(int morale, int nurseries, int hospitals, float mortalityReduction)
 {
 	const auto mortalityRate = moraleModifierTable[moraleIndex(morale)].mortalityRate;
-	const auto mortalityMultiplier = 1.0f + std::min(mortalityReduction, 2.0f);
+	const auto mortalityMultiplier = 1.0f - std::min(mortalityReduction, 0.95f);
 
 	int divisorChild = static_cast<int>((mortalityRate + (nurseries * 10)) * mortalityMultiplier);
 	int divisorStudent = static_cast<int>((mortalityRate + (hospitals * 65)) * mortalityMultiplier);
@@ -188,6 +239,7 @@ int PopulationModel::update(int morale, int food, int residences, int universiti
 	mBirthCount = 0;
 	mDeathCount = 0;
 
+	applyRetraining();
 	spawnPopulation(morale, residences, nurseries, universities, fertilityBonus, educationEfficiency);
 	killPopulation(morale, nurseries, hospitals, mortalityReduction);
 

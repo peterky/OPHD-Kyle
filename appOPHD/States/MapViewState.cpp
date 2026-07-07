@@ -206,7 +206,7 @@ MapViewState::MapViewState(GameState& gameState, SavedGameFile& saveGameFile, co
 	mNotificationWindow{{this, &MapViewState::onTakeMeThere}},
 	mPopulationPanel{mPopulationModel, mPopulationPool, mMorale},
 	mQuitHandler{quitHandler},
-	mResourceInfoBar{mResourcesCount, mStructureManager, mPopulationModel, mMorale, mFood},
+	mResourceInfoBar{mResourcesCount, mStructureManager, mPopulationModel, mPopulationPool, mMorale, mFood, mColonyFoodForecast},
 	mRobotDeploymentSummary{mRobotPool, mStructureManager},
 	mSkipTurnsDialog{{this, &MapViewState::skipTurns}}
 {
@@ -259,7 +259,7 @@ MapViewState::MapViewState(GameState& gameState, const PlanetAttributes& planetA
 	mPopulationPanel{mPopulationModel, mPopulationPool, mMorale},
 	mQuitHandler{quitHandler},
 	mPoliceOverlays{static_cast<std::vector<Tile*>::size_type>(mTileMap->maxDepth() + 1)},
-	mResourceInfoBar{mResourcesCount, mStructureManager, mPopulationModel, mMorale, mFood},
+	mResourceInfoBar{mResourcesCount, mStructureManager, mPopulationModel, mPopulationPool, mMorale, mFood, mColonyFoodForecast},
 	mRobotDeploymentSummary{mRobotPool, mStructureManager},
 	mSkipTurnsDialog{{this, &MapViewState::skipTurns}},
 	mMiniMap{std::make_unique<MiniMap>(*mMapView, *mTileMap, mStructureManager, mDeployedRobots, *mOreHaulRoutes, planetAttributes.mapImagePath)},
@@ -331,6 +331,7 @@ void MapViewState::initialize()
 	mReportsState.injectProductionHistory(mProductionHistory);
 	mReportsState.injectWorkforce(mPopulationModel, mPopulationPool);
 	mReportsState.injectTechnology(mTechnologyReader, mResearchTracker);
+	injectOrbitalReports();
 
 	mFade.fadeIn(constants::FadeSpeed);
 
@@ -378,6 +379,8 @@ void MapViewState::difficulty(Difficulty difficulty)
  */
 NAS2D::State* MapViewState::update()
 {
+	processAutomationCommands();
+
 	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
 	const auto windowClientRect = NAS2D::Rectangle{{0, 0}, renderer.size()};
 
@@ -550,9 +553,40 @@ void MapViewState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*
 		return;
 	}
 
+	if (key == NAS2D::KeyCode::F10)
+	{
+		auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();
+		if (eventHandler.control(mod) && eventHandler.shift(mod))
+		{
+			mCheatMenu.show();
+			mWindowStack.bringToFront(mCheatMenu);
+			return;
+		}
+
+		mReportsState.showReportPanel(ReportsState::ReportPanel::Workforce);
+		return;
+	}
+
+	if (key == NAS2D::KeyCode::F11)
+	{
+		mReportsState.showReportPanel(ReportsState::ReportPanel::Satellites);
+		return;
+	}
+
+	if (key == NAS2D::KeyCode::F12)
+	{
+		mReportsState.showReportPanel(ReportsState::ReportPanel::Spaceports);
+		return;
+	}
+
 	if (key == NAS2D::KeyCode::Enter && NAS2D::EventHandler::alt(mod))
 	{
+		updateColonyFoodForecast();
 		mSkipTurnsDialog.show();
+		mSkipTurnsDialog.refreshWarning(
+			mFood,
+			mColonyFoodForecast.productionPerTurn,
+			mColonyFoodForecast.consumptionPerTurn);
 		return;
 	}
 
@@ -634,14 +668,6 @@ void MapViewState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool /*
 
 		case NAS2D::KeyCode::End:
 			changeViewDepth(mTileMap->maxDepth());
-			break;
-
-		case NAS2D::KeyCode::F10:
-			if (NAS2D::Utility<NAS2D::EventHandler>::get().control(mod) && NAS2D::Utility<NAS2D::EventHandler>::get().shift(mod))
-			{
-				mCheatMenu.show();
-				mWindowStack.bringToFront(mCheatMenu);
-			}
 			break;
 
 		case NAS2D::KeyCode::F2:
@@ -1801,4 +1827,66 @@ void MapViewState::updatePoliceOverlay()
 bool MapViewState::hasGameEnded()
 {
 	return mFade.isFaded();
+}
+
+
+void MapViewState::injectOrbitalReports()
+{
+	mReportsState.injectOrbitalProgram(
+		mOrbitalProgram,
+		*mTileMap,
+		mResourcesCount,
+		mTechnologyReader,
+		mResearchTracker,
+		{this, &MapViewState::onLaunchSatellite});
+}
+
+
+void MapViewState::syncMineFacilityMaxDepth()
+{
+	for (auto* mineFacility : mStructureManager.getStructures<MineFacility>())
+	{
+		mineFacility->maxDepth(mTileMap->maxDepth());
+	}
+}
+
+
+void MapViewState::applyDigDepthExtension(int additionalLevels)
+{
+	mPlanetAttributes.maxDepth += additionalLevels;
+	mTileMap->extendMaxDepth(additionalLevels);
+	syncMineFacilityMaxDepth();
+}
+
+
+void MapViewState::onLaunchSatellite(const std::string& satelliteId)
+{
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	const auto attempt = mOrbitalProgram.attemptLaunch(satelliteId, *mTileMap, mResourcesCount, researchEffects);
+
+	if (!attempt.success)
+	{
+		doAlertMessage("Satellite Launch", attempt.message);
+		return;
+	}
+
+	if (const auto* definition = mOrbitalProgram.findDefinition(satelliteId))
+	{
+		auto launchCost = definition->launchCost;
+		removeRefinedResources(launchCost);
+		updatePlayerResources();
+	}
+
+	if (attempt.record.digDepthBonus > 0)
+	{
+		applyDigDepthExtension(attempt.record.digDepthBonus);
+	}
+
+	mNotificationArea.push({
+		"Satellite Launch",
+		attempt.message,
+		MapCoordinate{{-1, -1}, 0},
+		NotificationArea::NotificationType::Success});
+
+	injectOrbitalReports();
 }

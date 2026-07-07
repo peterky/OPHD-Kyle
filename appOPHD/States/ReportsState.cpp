@@ -4,6 +4,7 @@
 #include "../CacheFont.h"
 #include "../Constants/UiConstants.h"
 #include "../StructureManager.h"
+#include "../MapObjects/Structure.h"
 
 #include "../UI/Reports/Report.h"
 
@@ -13,6 +14,17 @@
 #include "../UI/Reports/SatellitesReport.h"
 #include "../UI/Reports/SpaceportsReport.h"
 #include "../UI/Reports/WarehouseReport.h"
+#include "../UI/Reports/ProductionReport.h"
+#include "../UI/Reports/MaintenanceReport.h"
+#include "../UI/Reports/WorkforceReport.h"
+#include "../ColonyProductionHistory.h"
+#include "../ColonyOrbitalProgram.h"
+#include "../Map/TileMap.h"
+
+#include <libOPHD/StorableResources.h>
+
+#include <libOPHD/Population/PopulationModel.h>
+#include <libOPHD/Population/PopulationPool.h>
 
 #include <NAS2D/EnumKeyCode.h>
 #include <NAS2D/EnumMouseButton.h>
@@ -23,153 +35,24 @@
 #include <NAS2D/Math/Point.h>
 #include <NAS2D/Math/Vector.h>
 
-#include <array>
 
-
-namespace
+void ReportsState::ReportTab::select(Structure& structure)
 {
-	enum class NavigationPanel
+	selected(true);
+	if (!report) { return; }
+
+	report->visible(true);
+	report->refresh();
+	report->selectStructure(structure);
+}
+
+
+void ReportsState::ReportTab::selected(bool isSelected)
+{
+	mIsSelected = isSelected;
+	if (report)
 	{
-		Research,
-		Production,
-		Warehouse,
-		Mines,
-		Satellites,
-		Spaceports,
-		Exit
-	};
-
-	constexpr auto ResearchPanelIndex = static_cast<size_t>(NavigationPanel::Research);
-	constexpr auto MinePanelIndex = static_cast<size_t>(NavigationPanel::Mines);
-	constexpr auto ExitPanelIndex = static_cast<size_t>(NavigationPanel::Exit);
-
-
-	class Panel
-	{
-	public:
-		Panel() = default;
-		Panel(Report* newReport, std::string newName, const NAS2D::Image* newIcon) :
-			report{newReport},
-			name{newName},
-			icon{newIcon}
-		{}
-
-		void select(Structure& structure)
-		{
-			selected(true);
-			report->visible(true);
-			report->refresh();
-			report->selectStructure(structure);
-		}
-
-		void selected(bool isSelected)
-		{
-			mIsSelected = isSelected;
-			if (report)
-			{
-				report->enabled(isSelected);
-			}
-		}
-
-		bool selected() const
-		{
-			return mIsSelected;
-		}
-
-		void highlighted(bool isHighlighted)
-		{
-			mIsHighlighted = isHighlighted;
-		}
-
-		bool highlighted() const
-		{
-			return mIsHighlighted;
-		}
-
-	public:
-		Report* report = nullptr;
-		std::string name;
-		const NAS2D::Image* icon = nullptr;
-
-		NAS2D::Rectangle<int> tabArea;
-		NAS2D::Point<int> textPosition;
-		NAS2D::Point<int> iconPosition;
-
-	private:
-		bool mIsSelected = false;
-		bool mIsHighlighted = false;
-	};
-
-
-	static std::array<Panel, 7> panels;
-
-
-	void initializePanels(const StructureManager& structureManager, ReportsState::TakeMeThereDelegate takeMeThereHandler)
-	{
-		/* NOTE: Matches the order in enum NavigationPanel */
-		panels = std::array<Panel, 7>{
-			Panel{new ResearchReport(structureManager, takeMeThereHandler), "Research", &getImage("ui/icons/research.png")},
-			Panel{new FactoryReport(structureManager, takeMeThereHandler), "Factories", &getImage("ui/icons/production.png")},
-			Panel{new WarehouseReport(structureManager, takeMeThereHandler), "Warehouses", &getImage("ui/icons/warehouse.png")},
-			Panel{new MineReport(structureManager, takeMeThereHandler), "Mines", &getImage("ui/icons/mine.png")},
-			Panel{new SatellitesReport(structureManager, takeMeThereHandler), "Satellites", &getImage("ui/icons/satellite.png")},
-			Panel{new SpaceportsReport(structureManager, takeMeThereHandler), "Space Ports", &getImage("ui/icons/spaceport.png")},
-			Panel{nullptr, "", &getImage("ui/icons/exit.png")}
-		};
-
-		for (auto& panel : panels)
-		{
-			auto* report = panel.report;
-			if (report)
-			{
-				report->hide();
-			}
-		}
-	}
-
-
-	void onResizeTabBar(int width, const NAS2D::Font& font)
-	{
-		auto& exitPanel = panels[ExitPanelIndex];
-		exitPanel.tabArea = {{width - 48, 0}, {48, 48}};
-		exitPanel.iconPosition = {width - 40, 8};
-
-		int remaining_width = width - exitPanel.tabArea.size.x;
-		const auto panelSize = NAS2D::Vector{remaining_width / 6, 48};
-
-		auto panelPosition = NAS2D::Point{0, 0};
-		for (std::size_t i = 0; i < panels.size() - 1; ++i)
-		{
-			auto& panel = panels[i];
-			panel.tabArea = NAS2D::Rectangle{panelPosition, panelSize};
-			panel.textPosition = panelPosition + (panelSize - font.size(panel.name)) / 2 + NAS2D::Vector{20, 0};
-			panel.iconPosition = {panel.textPosition.x - 40, 8};
-			panelPosition.x += panelSize.x;
-		}
-	}
-
-
-	void drawPanel(NAS2D::Renderer& renderer, Panel& panel, const NAS2D::Font& font)
-	{
-		if (panel.highlighted())
-		{
-			renderer.drawBoxFilled(panel.tabArea, constants::HighlightColor);
-		}
-
-		auto drawColor = panel.selected() ? constants::PrimaryColor : constants::SecondaryColor;
-
-		if (panel.selected())
-		{
-			renderer.drawBoxFilled(panel.tabArea, constants::PrimaryColorVariant);
-
-			if (panel.report)
-			{
-				panel.report->update();
-			}
-		}
-
-		renderer.drawText(font, panel.name, panel.textPosition, drawColor);
-		renderer.drawImage(*panel.icon, panel.iconPosition, 1.0f, drawColor);
+		report->enabled(isSelected);
 	}
 }
 
@@ -183,7 +66,6 @@ ReportsState::ReportsState(const StructureManager& structureManager, TakeMeThere
 {
 	auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();
 	eventHandler.windowResized().connect({this, &ReportsState::onWindowResized});
-	eventHandler.keyDown().connect({this, &ReportsState::onKeyDown});
 	eventHandler.mouseButtonDown().connect({this, &ReportsState::onMouseDown});
 	eventHandler.mouseMotion().connect({this, &ReportsState::onMouseMove});
 }
@@ -193,34 +75,118 @@ ReportsState::~ReportsState()
 {
 	auto& eventHandler = NAS2D::Utility<NAS2D::EventHandler>::get();
 	eventHandler.windowResized().disconnect({this, &ReportsState::onWindowResized});
-	eventHandler.keyDown().disconnect({this, &ReportsState::onKeyDown});
 	eventHandler.mouseButtonDown().disconnect({this, &ReportsState::onMouseDown});
 	eventHandler.mouseMotion().disconnect({this, &ReportsState::onMouseMove});
 
-	for (Panel& panel : panels)
+	for (ReportTab& panel : mPanels)
 	{
 		delete panel.report;
+		panel.report = nullptr;
 	}
 }
 
 
 void ReportsState::initialize()
 {
-	initializePanels(mStructureManager, {this, &ReportsState::onTakeMeThere});
+	initializePanels();
 	const auto size = NAS2D::Utility<NAS2D::Renderer>::get().size().to<int>();
 	onWindowResized(size);
 }
 
 
+void ReportsState::initializePanels()
+{
+	for (ReportTab& panel : mPanels)
+	{
+		delete panel.report;
+		panel.report = nullptr;
+	}
+
+	mPanels = std::array<ReportTab, PanelCount>{
+		ReportTab{new ResearchReport(mStructureManager, mTakeMeThereHandler), "Research", nullptr},
+		ReportTab{new FactoryReport(mStructureManager, mTakeMeThereHandler), "Factory", nullptr},
+		ReportTab{new WarehouseReport(mStructureManager, mTakeMeThereHandler), "Stores", nullptr},
+		ReportTab{new MineReport(mStructureManager, mTakeMeThereHandler), "Mines", nullptr},
+		ReportTab{new ProductionReport(mStructureManager, mTakeMeThereHandler), "Output", nullptr},
+		ReportTab{new MaintenanceReport(mStructureManager, mTakeMeThereHandler), "Maint.", nullptr},
+		ReportTab{new WorkforceReport(mStructureManager, mTakeMeThereHandler), "Workers", nullptr},
+		ReportTab{new SatellitesReport(mStructureManager, mTakeMeThereHandler), "Sats", nullptr},
+		ReportTab{new SpaceportsReport(mStructureManager, mTakeMeThereHandler), "Ports", nullptr},
+		ReportTab{nullptr, "", nullptr}
+	};
+
+	for (auto& panel : mPanels)
+	{
+		if (panel.report)
+		{
+			panel.report->hide();
+		}
+	}
+}
+
+
+void ReportsState::onResizeTabBar(int width)
+{
+	auto& exitPanel = mPanels[ExitPanelIndex];
+	exitPanel.tabArea = {{width - 48, 0}, {48, 48}};
+	const auto exitLabel = std::string{"X"};
+	exitPanel.textPosition = exitPanel.tabArea.position + (exitPanel.tabArea.size - fontMain.size(exitLabel)) / 2;
+
+	const auto remainingWidth = width - exitPanel.tabArea.size.x;
+	const auto panelSize = NAS2D::Vector{remainingWidth / 9, 48};
+
+	auto panelPosition = NAS2D::Point{0, 0};
+	for (std::size_t i = 0; i < mPanels.size() - 1; ++i)
+	{
+		auto& panel = mPanels[i];
+		panel.tabArea = NAS2D::Rectangle{panelPosition, panelSize};
+		panel.textPosition = panelPosition + (panelSize - fontMain.size(panel.name)) / 2;
+		panelPosition.x += panelSize.x;
+	}
+}
+
+
+void ReportsState::drawTab(NAS2D::Renderer& renderer, std::size_t panelIndex)
+{
+	auto& panel = mPanels[panelIndex];
+
+	if (panel.highlighted())
+	{
+		renderer.drawBoxFilled(panel.tabArea, constants::HighlightColor);
+	}
+
+	const auto drawColor = panel.selected() ? constants::PrimaryColor : constants::SecondaryColor;
+
+	if (panel.selected())
+	{
+		renderer.drawBoxFilled(panel.tabArea, constants::PrimaryColorVariant);
+
+		if (panel.report)
+		{
+			panel.report->update();
+		}
+	}
+
+	if (panelIndex == ExitPanelIndex)
+	{
+		renderer.drawText(fontMain, "X", panel.textPosition, drawColor);
+	}
+	else
+	{
+		renderer.drawText(fontMain, panel.name, panel.textPosition, drawColor);
+	}
+}
+
+
 void ReportsState::onActivate()
 {
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
 		if (panel.report)
 		{
 			panel.report->fillLists();
 			panel.report->refresh();
-			panel.report->show();
+			panel.report->hide();
 		}
 	}
 }
@@ -228,7 +194,7 @@ void ReportsState::onActivate()
 
 void ReportsState::onDeactivate()
 {
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
 		if (panel.report)
 		{
@@ -243,8 +209,8 @@ void ReportsState::onDeactivate()
 
 void ReportsState::onWindowResized(NAS2D::Vector<int> newSize)
 {
-	onResizeTabBar(newSize.x, fontMain);
-	for (Panel& panel : panels)
+	onResizeTabBar(newSize.x);
+	for (ReportTab& panel : mPanels)
 	{
 		if (panel.report)
 		{
@@ -256,36 +222,15 @@ void ReportsState::onWindowResized(NAS2D::Vector<int> newSize)
 
 void ReportsState::onTakeMeThere(const Structure* structure)
 {
-	// Ignore events that come from an inactive tab
-	// This is a bit of a hack to fix a bug where non-visible reports respond to events
-	// It would be cleaner to have non-visible reports not process user input
-	// A better fix relies up reworking event dispatch
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
-		if (panel.report)
+		if (panel.report && panel.report->canView(*structure) && !panel.selected())
 		{
-			if (panel.report->canView(*structure) && !panel.selected())
-			{
-				return;
-			}
+			return;
 		}
 	}
 
 	if (mTakeMeThereHandler) { mTakeMeThereHandler(structure); }
-}
-
-
-void ReportsState::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier /*mod*/, bool /*repeat*/)
-{
-	if (!active())
-	{
-		return;
-	}
-
-	if (key == NAS2D::KeyCode::Escape)
-	{
-		onExit();
-	}
 }
 
 
@@ -296,7 +241,6 @@ void ReportsState::onMouseDown(NAS2D::MouseButton button, NAS2D::Point<int> posi
 		return;
 	}
 
-	// ignore clicks in the UI area.
 	if (!NAS2D::Rectangle<int>{{0, 0}, {NAS2D::Utility<NAS2D::Renderer>::get().size().x, 40}}.contains(position))
 	{
 		return;
@@ -304,9 +248,9 @@ void ReportsState::onMouseDown(NAS2D::MouseButton button, NAS2D::Point<int> posi
 
 	if (button == NAS2D::MouseButton::Left)
 	{
-		for (Panel& panel : panels)
+		for (ReportTab& panel : mPanels)
 		{
-			bool selected = panel.tabArea.contains(position);
+			const bool selected = panel.tabArea.contains(position);
 			panel.selected(selected);
 
 			if (panel.report)
@@ -316,7 +260,7 @@ void ReportsState::onMouseDown(NAS2D::MouseButton button, NAS2D::Point<int> posi
 		}
 	}
 
-	if (panels[ExitPanelIndex].selected())
+	if (mPanels[ExitPanelIndex].selected())
 	{
 		onExit();
 	}
@@ -325,7 +269,7 @@ void ReportsState::onMouseDown(NAS2D::MouseButton button, NAS2D::Point<int> posi
 
 void ReportsState::onMouseMove(NAS2D::Point<int> position, NAS2D::Vector<int> /*relative*/)
 {
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
 		panel.highlighted(panel.tabArea.contains(position));
 	}
@@ -336,7 +280,7 @@ void ReportsState::onExit()
 {
 	deselectAllPanels();
 
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
 		if (panel.report)
 		{
@@ -350,7 +294,7 @@ void ReportsState::onExit()
 
 void ReportsState::deselectAllPanels()
 {
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
 		panel.selected(false);
 	}
@@ -363,19 +307,44 @@ void ReportsState::showReport()
 }
 
 
+void ReportsState::selectPanel(std::size_t panelIndex)
+{
+	for (std::size_t i = 0; i < mPanels.size(); ++i)
+	{
+		const bool isSelected = i == panelIndex;
+		mPanels[i].selected(isSelected);
+
+		if (mPanels[i].report)
+		{
+			mPanels[i].report->visible(isSelected);
+		}
+	}
+}
+
+
+void ReportsState::showReportPanel(ReportPanel panel)
+{
+	const auto panelIndex = static_cast<std::size_t>(panel);
+
+	if (!active())
+	{
+		if (mShowReportsHandler) { mShowReportsHandler(); }
+	}
+
+	selectPanel(panelIndex);
+}
+
+
 void ReportsState::showReport(Structure& structure)
 {
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
-		if (panel.report)
+		if (panel.report && panel.report->canView(structure))
 		{
-			if (panel.report->canView(structure))
-			{
-				deselectAllPanels();
-				panel.select(structure);
-				if (mShowReportsHandler) { mShowReportsHandler(); }
-				return;
-			}
+			deselectAllPanels();
+			panel.select(structure);
+			if (mShowReportsHandler) { mShowReportsHandler(); }
+			return;
 		}
 	}
 }
@@ -383,21 +352,61 @@ void ReportsState::showReport(Structure& structure)
 
 void ReportsState::injectOreHaulRoutes(const OreHaulRoutes& oreHaulRoutes)
 {
-	auto* minePanel = panels[MinePanelIndex].report;
+	auto* minePanel = mPanels[MinePanelIndex].report;
+	if (!minePanel) { return; }
 	dynamic_cast<MineReport&>(*minePanel).injectOreHaulRoutes(oreHaulRoutes);
+}
+
+
+void ReportsState::injectProductionHistory(const ColonyProductionHistory& history)
+{
+	auto* productionPanel = mPanels[ProductionPanelIndex].report;
+	if (!productionPanel) { return; }
+	dynamic_cast<ProductionReport&>(*productionPanel).injectHistory(history);
+}
+
+
+void ReportsState::injectWorkforce(PopulationModel& populationModel, const PopulationPool& populationPool)
+{
+	auto* workforcePanel = mPanels[WorkforcePanelIndex].report;
+	if (!workforcePanel) { return; }
+	dynamic_cast<WorkforceReport&>(*workforcePanel).injectPopulation(populationModel, populationPool);
 }
 
 
 void ReportsState::injectTechnology(TechnologyCatalog& catalog, ResearchTracker& tracker)
 {
-	auto* researchPanel = panels[ResearchPanelIndex].report;
+	auto* researchPanel = mPanels[ResearchPanelIndex].report;
+	if (!researchPanel) { return; }
 	dynamic_cast<ResearchReport&>(*researchPanel).injectTechReferences(catalog, tracker);
+}
+
+
+void ReportsState::injectOrbitalProgram(
+	ColonyOrbitalProgram& program,
+	TileMap& tileMap,
+	StorableResources& resources,
+	TechnologyCatalog& catalog,
+	ResearchTracker& tracker,
+	NAS2D::Delegate<void(const std::string&)> launchHandler)
+{
+	auto* satellitesPanel = mPanels[SatellitesPanelIndex].report;
+	if (satellitesPanel)
+	{
+		dynamic_cast<SatellitesReport&>(*satellitesPanel).injectOrbitalProgram(program, tileMap, catalog, tracker);
+	}
+
+	auto* spaceportsPanel = mPanels[SpaceportsPanelIndex].report;
+	if (spaceportsPanel)
+	{
+		dynamic_cast<SpaceportsReport&>(*spaceportsPanel).injectOrbitalProgram(program, tileMap, resources, catalog, tracker, launchHandler);
+	}
 }
 
 
 void ReportsState::clearLists()
 {
-	for (auto& panel : panels)
+	for (auto& panel : mPanels)
 	{
 		if (panel.report)
 		{
@@ -414,9 +423,9 @@ NAS2D::State* ReportsState::update()
 	renderer.clearScreen(NAS2D::Color{35, 35, 35});
 	renderer.drawBoxFilled(NAS2D::Rectangle<int>{{0, 0}, {renderer.size().x, 48}}, NAS2D::Color::Black);
 
-	for (Panel& panel : panels)
+	for (std::size_t i = 0; i < mPanels.size(); ++i)
 	{
-		drawPanel(renderer, panel, fontMain);
+		this->drawTab(renderer, i);
 	}
 
 	return this;

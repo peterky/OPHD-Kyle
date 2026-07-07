@@ -67,6 +67,7 @@ private:
 	void resetResearchDetails();
 	void handleTopicChanged();
 	void onStartResearch();
+	void onShowTechIndex();
 	void updateResearchControls();
 
 	bool canStartOrQueueSelectedResearch() const;
@@ -122,7 +123,9 @@ private:
 
 	ResearchTechTree mTechTree;
 	Button btnStartResearch;
+	Button btnTechIndex;
 	Label lblResearchProgress;
+	bool mShowingTechIndex{false};
 
 	TextArea txtTopicDescription;
 

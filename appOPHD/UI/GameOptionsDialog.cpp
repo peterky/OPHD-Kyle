@@ -22,6 +22,7 @@ GameOptionsDialog::GameOptionsDialog(
 	ClickHandler saveClickHandler,
 	ClickHandler loadClickHandler,
 	ClickHandler exitClickHandler,
+	ClickHandler quitGameClickHandler,
 	ClickHandler continueClickHandler
 ) :
 	Window{constants::WindowSystemTitle},
@@ -31,11 +32,12 @@ GameOptionsDialog::GameOptionsDialog(
 	btnLoad{"Load Game", loadClickHandler},
 	btnHelp{"Help", {this, &GameOptionsDialog::onHelp}},
 	btnExit{"Exit to Main Menu", exitClickHandler},
+	btnQuitGame{"Exit Game", quitGameClickHandler},
 	btnContinue{"Continue Playing", continueClickHandler}
 {
 	position({0, 0});
 
-	const auto buttons = std::array{&btnKeyBindings, &btnSave, &btnLoad, &btnHelp, &btnExit, &btnContinue};
+	const auto buttons = std::array{&btnKeyBindings, &btnSave, &btnLoad, &btnHelp, &btnExit, &btnQuitGame, &btnContinue};
 	auto position = mRect.position + NAS2D::Vector{buttonMargin.x, buttonSize.y};
 	for (auto button : buttons)
 	{
@@ -58,9 +60,8 @@ GameOptionsDialog::~GameOptionsDialog()
 }
 
 
-void GameOptionsDialog::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier /*mod*/, bool /*repeat*/)
+void GameOptionsDialog::onKeyDown(NAS2D::KeyCode /*key*/, NAS2D::KeyModifier /*mod*/, bool /*repeat*/)
 {
-	if (key == NAS2D::KeyCode::Escape) { mContinueClickHandler(); }
 }
 
 
@@ -71,6 +72,7 @@ void GameOptionsDialog::onEnableChange()
 	btnLoad.enabled(enabled());
 	btnHelp.enabled(enabled());
 	btnExit.enabled(enabled());
+	btnQuitGame.enabled(enabled());
 	btnContinue.enabled(enabled());
 }
 

@@ -255,18 +255,49 @@ void resourceShortageMessage(const StorableResources& resources, StructureID sid
 }
 
 
+namespace
+{
+	bool isColonyRefinedOreStore(const Structure& structure)
+	{
+		// Smelters keep their own refined buffer for active processing; colony stockpiles use tanks and the CC.
+		return structure.structureId() == StructureID::StorageTanks || structure.isCommand();
+	}
+
+
+	int colonyOreStoreFillPriority(const Structure& structure)
+	{
+		if (structure.structureId() == StructureID::StorageTanks) { return 0; }
+		if (structure.isCommand()) { return 1; }
+		return 2;
+	}
+
+
+	int colonyOreStorePullPriority(const Structure& structure)
+	{
+		if (structure.structureId() == StructureID::StorageTanks) { return 0; }
+		if (structure.isSmelter()) { return 1; }
+		if (structure.isCommand()) { return 2; }
+		return 1;
+	}
+}
+
+
 /**
  * Add refined resources to the players storage structures.
  */
 StorableResources addRefinedResources(StorableResources resourcesToAdd)
 {
-	/**
-	 * The Command Center acts as backup storage especially during the beginning of the
-	 * game before storage tanks are built. This ensure that the CC is in the storage
-	 * structure list and that it's always the first structure in the list.
-	 */
-	const auto structureIsOreStore = [](const Structure& structure) { return structure.isOreStore(); };
-	const auto& storageStructures = NAS2D::Utility<StructureManager>::get().getStructures(structureIsOreStore);
+	const auto structureIsColonyOreStore = [](const Structure& structure)
+	{
+		return structure.isOreStore() && isColonyRefinedOreStore(structure);
+	};
+
+	auto storageStructures = NAS2D::Utility<StructureManager>::get().getStructures(structureIsColonyOreStore);
+	std::ranges::stable_sort(storageStructures, [](const Structure* lhs, const Structure* rhs)
+	{
+		return colonyOreStoreFillPriority(*lhs) < colonyOreStoreFillPriority(*rhs);
+	});
+
 	for (auto* structure : storageStructures)
 	{
 		if (resourcesToAdd.isEmpty()) { break; }
@@ -293,10 +324,13 @@ StorableResources addRefinedResources(StorableResources resourcesToAdd)
  */
 void removeRefinedResources(StorableResources& resourcesToRemove)
 {
-	// Command Center is backup storage, we want to pull from it last
+	// Pull from tanks first, then smelter buffers, then the Command Center last.
 	const auto structureIsOreStore = [](const Structure& structure) { return structure.isOreStore(); };
 	auto storageStructures = NAS2D::Utility<StructureManager>::get().getStructures(structureIsOreStore);
-	std::ranges::reverse(storageStructures);
+	std::ranges::stable_sort(storageStructures, [](const Structure* lhs, const Structure* rhs)
+	{
+		return colonyOreStorePullPriority(*lhs) < colonyOreStorePullPriority(*rhs);
+	});
 
 	for (auto* structure : storageStructures)
 	{

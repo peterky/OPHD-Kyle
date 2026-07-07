@@ -101,7 +101,7 @@ void MiniMap::draw(NAS2D::Renderer& renderer) const
 
 	for (const auto* oreDeposit : mTileMap.oreDeposits())
 	{
-		if (!oreDeposit) { break; } // avoids potential race condition where an Ore Deposit is destroyed during an updated cycle.
+		if (!oreDeposit) { continue; }
 
 		const auto& tile = mTileMap.getTile({oreDeposit->location(), 0});
 		const auto mineBeaconStatusOffsetX = (!tile.hasStructure() || !tile.structure()->isMineFacility()) ? 0 :

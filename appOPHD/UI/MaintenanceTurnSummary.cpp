@@ -74,15 +74,29 @@ void MaintenanceTurnSummary::draw(NAS2D::Renderer& renderer) const
 
 	const auto hasData = mStats.personnelCapacity > 0 || mStats.required > 0 || mStats.wasteGenerated > 0;
 	const auto wasteColor = mStats.residencesOverflowing > 0 ? NAS2D::Color{255, 180, 120} : NAS2D::Color::White;
-	const auto wasteValue = hasData ?
+	auto wasteValue = hasData ?
 		std::to_string(mStats.wasteProcessing) + "/" + std::to_string(mStats.wasteGenerated) +
 			" (" + std::to_string(mStats.recyclingPlantsOperational) + " plants)" :
+		"—";
+	if (hasData && mStats.partsProducedFromWaste > 0)
+	{
+		wasteValue += ", +" + std::to_string(mStats.partsStoredFromWaste) + " parts";
+		if (mStats.partsLostToWarehouseOverflow > 0)
+		{
+			wasteValue += " (" + std::to_string(mStats.partsLostToWarehouseOverflow) + " lost)";
+		}
+	}
+
+	const auto partsColor = mStats.partsLostToWarehouseOverflow > 0 ? NAS2D::Color{255, 180, 120} : NAS2D::Color::White;
+	const auto partsValue = hasData ?
+		std::to_string(mStats.suppliesOnHand) + "/" + std::to_string(mStats.suppliesCapacity) +
+			" (WH " + std::to_string(mStats.warehousePartsOnHand) + ")" :
 		"—";
 
 	const std::array<Row, 4> rows{{
 		{"Repaired", hasData ? std::to_string(mStats.repaired) + "/" + std::to_string(mStats.pending) + "/" + std::to_string(mStats.required) : "—", NAS2D::Color::White},
 		{"Crew", hasData ? std::to_string(mStats.personnelAssigned) + "/" + std::to_string(mStats.personnelCapacity) : "—", NAS2D::Color::White},
-		{"Parts", hasData ? std::to_string(mStats.suppliesOnHand) + "/" + std::to_string(mStats.suppliesCapacity) : "—", NAS2D::Color::White},
+		{"Parts", partsValue, partsColor},
 		{"Waste", wasteValue, wasteColor},
 	}};
 

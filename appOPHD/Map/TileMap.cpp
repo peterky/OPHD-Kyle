@@ -16,16 +16,20 @@
 #include <NAS2D/Resource/Image.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <limits>
 #include <numeric>
-#include <array>
+#include <stdexcept>
 
 
 namespace {
 	const std::string MapTerrainExtension = "_a.png";
 	const auto MapSize = NAS2D::Vector{300, 150};
+	// Reserve headroom so extendMaxDepth() can grow without reallocating existing tiles
+	// (Structure objects hold Tile& references that would dangle on vector reallocation).
+	constexpr int ReservedExtraDepthLevels{2};
 
 
 	const std::array<std::string, 4> ResourceFieldNames =
@@ -226,9 +230,39 @@ void TileMap::populateUndiscoveredOreDeposits(std::size_t oreDepositCount, const
 
 TileMap::TileMap(const std::string& mapPath, int maxDepth) :
 	mSizeInTiles{MapSize},
+	mMapPath{mapPath},
 	mMaxDepth{maxDepth}
 {
 	buildTerrainMap(mapPath);
+}
+
+
+void TileMap::extendMaxDepth(int additionalLevels)
+{
+	if (additionalLevels <= 0) { return; }
+
+	const auto previousMaxDepth = mMaxDepth;
+	mMaxDepth += additionalLevels;
+
+	const auto newLinearSize = linearSize();
+	if (newLinearSize > mTileMap.capacity())
+	{
+		throw std::runtime_error("TileMap::extendMaxDepth(): tile storage capacity exceeded; structure tile references would be invalidated.");
+	}
+
+	const NAS2D::Image heightmap(mMapPath + MapTerrainExtension);
+	mTileMap.resize(newLinearSize);
+
+	for (int depth = previousMaxDepth + 1; depth <= mMaxDepth; ++depth)
+	{
+		for (const auto point : NAS2D::PointInRectangleRange{area()})
+		{
+			const auto color = heightmap.pixelColor(point);
+			auto& tile = getTile({point, depth});
+			const auto terrainType = static_cast<TerrainType>(std::clamp(color.red / 50, 1, 4));
+			tile = {{point, depth}, terrainType};
+		}
+	}
 }
 
 
@@ -535,6 +569,9 @@ void TileMap::buildTerrainMap(const std::string& path)
 {
 	const NAS2D::Image heightmap(path + MapTerrainExtension);
 
+	const auto mapArea = mSizeInTiles.to<std::size_t>();
+	const auto tilesPerLevel = mapArea.x * mapArea.y;
+	mTileMap.reserve(tilesPerLevel * static_cast<std::size_t>(mMaxDepth + 1 + ReservedExtraDepthLevels));
 	mTileMap.resize(linearSize());
 
 	/**

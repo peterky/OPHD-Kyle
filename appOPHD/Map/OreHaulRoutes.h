@@ -27,6 +27,7 @@ public:
 
 	void updateRoutes();
 	void transportOreFromMines();
+	void transportOreFromWarehouses();
 
 	std::vector<Tile*> getRouteOverlay() const;
 

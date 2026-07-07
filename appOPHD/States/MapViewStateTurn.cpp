@@ -5,6 +5,7 @@
 #include "MapViewState.h"
 
 #include "../ColonyDiagnostics.h"
+#include "../ColonyFoodForecast.h"
 #include "MapViewStateHelper.h"
 #include "ColonyShip.h"
 
@@ -31,6 +32,7 @@
 
 #include "../ColonyProductionHistory.h"
 #include "../ColonyMaintenanceStats.h"
+#include "../ColonyWarehouseLogistics.h"
 #include "../MaintenancePriority.h"
 #include "../TruckAvailability.h"
 
@@ -38,6 +40,7 @@
 #include "../MoraleString.h"
 #include "../StructureManager.h"
 #include "../Constants/Strings.h"
+#include "ResearchStructureUnlocks.h"
 
 #include <libOPHD/DirectionOffset.h>
 #include <libOPHD/EnumDifficulty.h>
@@ -65,58 +68,6 @@
 
 namespace
 {
-	const std::map<std::string, StructureID> StructureIdFromString =
-	{
-		{"Agridome", StructureID::Agridome},
-		{"Chap", StructureID::Chap},
-		{"CommTower", StructureID::CommTower},
-		{"CommTower2", StructureID::CommTower},
-		{"CommTower3", StructureID::CommTower},
-		{"Commercial", StructureID::Commercial},
-		{"FusionReactor", StructureID::FusionReactor},
-		{"HotLaboratory", StructureID::HotLaboratory},
-		{"Laboratory", StructureID::Laboratory},
-		{"MaintenanceFacility", StructureID::MaintenanceFacility},
-		{"MedicalCenter", StructureID::MedicalCenter},
-		{"Nursery", StructureID::Nursery},
-		{"Park", StructureID::Park},
-		{"RecreationCenter", StructureID::RecreationCenter},
-		{"Recycling", StructureID::Recycling},
-		{"RedLightDistrict", StructureID::RedLightDistrict},
-		{"Residence", StructureID::Residence},
-		{"RobotCommand", StructureID::RobotCommand},
-		{"RobotCommand2", StructureID::RobotCommand},
-		{"Smelter", StructureID::Smelter},
-		{"Smelter2", StructureID::Smelter},
-		{"SolarPanel1", StructureID::SolarPanel1},
-		{"SolarPanel2", StructureID::SolarPanel1},
-		{"SolarPlant", StructureID::SolarPlant},
-		{"StorageTanks", StructureID::StorageTanks},
-		{"SurfaceFactory", StructureID::SurfaceFactory},
-		{"SurfacePolice", StructureID::SurfacePolice},
-		{"UndergroundFactory", StructureID::UndergroundFactory},
-		{"UndergroundPolice", StructureID::UndergroundPolice},
-		{"University", StructureID::University},
-		{"Warehouse", StructureID::Warehouse},
-	};
-
-
-	const std::set<StructureID> UndergroundStructures =
-	{
-		StructureID::Commercial,
-		StructureID::Laboratory,
-		StructureID::MedicalCenter,
-		StructureID::Nursery,
-		StructureID::Park,
-		StructureID::RecreationCenter,
-		StructureID::RedLightDistrict,
-		StructureID::Residence,
-		StructureID::UndergroundFactory,
-		StructureID::UndergroundPolice,
-		StructureID::University,
-	};
-
-
 	std::string labTypeName(int labType)
 	{
 		return (labType == 0) ? "Underground Lab" : "Hot Lab";
@@ -394,6 +345,7 @@ void MapViewState::updateResources()
 		mRoutesDirty = false;
 	}
 	mOreHaulRoutes->transportOreFromMines();
+	mOreHaulRoutes->transportOreFromWarehouses();
 	transportResourcesToStorage();
 	updatePlayerResources();
 }
@@ -485,6 +437,10 @@ void MapViewState::updateBiowasteRecycling()
 	mMaintenanceTurnStats.residencesOverflowing = 0;
 	mMaintenanceTurnStats.recyclingPlantsOperational = 0;
 	mMaintenanceTurnStats.recyclingPlantsTotal = 0;
+	mMaintenanceTurnStats.wasteRecycled = 0;
+	mMaintenanceTurnStats.partsProducedFromWaste = 0;
+	mMaintenanceTurnStats.partsStoredFromWaste = 0;
+	mMaintenanceTurnStats.partsLostToWarehouseOverflow = 0;
 
 	for (const auto* residence : mStructureManager.getStructures<Residence>())
 	{
@@ -512,16 +468,26 @@ void MapViewState::updateBiowasteRecycling()
 
 	mMaintenanceTurnStats.wasteProcessing = researchEffects.adjustedBioWasteProcessing(mStructureManager.totalBioWasteProcessingCapacity());
 
+	int totalWasteBefore{0};
+	for (const auto* residence : mStructureManager.getStructures<Residence>())
+	{
+		totalWasteBefore += residence->wasteAccumulated() + residence->wasteOverflow();
+	}
+
 	int bioWasteProcessingCapacity = mMaintenanceTurnStats.wasteProcessing;
 	if (bioWasteProcessingCapacity <= 0)
 	{
-		mMaintenanceTurnSummary.setStats(mMaintenanceTurnStats);
+		for (auto* recyclingPlant : mStructureManager.getStructures<Recycling>())
+		{
+			recyclingPlant->recordTurnResults(0, 0);
+		}
+		mMaintenanceTurnStats.warehousePartsOnHand = countMaintenancePartsInWarehouses(mStructureManager);
 		return;
 	}
 
-	// Process overflow first, prioritizing structures with minimal overflow
+	// Process overflow first, prioritizing residences with the largest backlog
 	auto residences = mStructureManager.getStructures<Residence>();
-	std::ranges::stable_sort(residences, std::ranges::less{}, [](const Residence* residence) { return residence->wasteOverflow(); });
+	std::ranges::stable_sort(residences, std::ranges::greater{}, [](const Residence* residence) { return residence->wasteOverflow(); });
 	for (auto* residence : residences)
 	{
 		const auto amountToProcess = std::min(bioWasteProcessingCapacity, residence->wasteOverflow());
@@ -539,15 +505,44 @@ void MapViewState::updateBiowasteRecycling()
 	}
 
 	mMaintenanceTurnStats.residencesOverflowing = 0;
+	int totalWasteAfter{0};
 	for (const auto* residence : mStructureManager.getStructures<Residence>())
 	{
+		totalWasteAfter += residence->wasteAccumulated() + residence->wasteOverflow();
 		if (residence->wasteOverflow() > 0)
 		{
 			++mMaintenanceTurnStats.residencesOverflowing;
 		}
 	}
 
-	mMaintenanceTurnSummary.setStats(mMaintenanceTurnStats);
+	mMaintenanceTurnStats.wasteRecycled = std::max(0, totalWasteBefore - totalWasteAfter);
+	constexpr int WastePerMaintenancePart{20};
+	mMaintenanceTurnStats.partsProducedFromWaste = mMaintenanceTurnStats.wasteRecycled / WastePerMaintenancePart;
+	mMaintenanceTurnStats.partsStoredFromWaste = storeMaintenancePartsInWarehouses(mMaintenanceTurnStats.partsProducedFromWaste);
+	mMaintenanceTurnStats.partsLostToWarehouseOverflow =
+		mMaintenanceTurnStats.partsProducedFromWaste - mMaintenanceTurnStats.partsStoredFromWaste;
+
+	if (mMaintenanceTurnStats.partsLostToWarehouseOverflow > 0)
+	{
+		mNotificationArea.push({
+			"Warehouse Full",
+			std::to_string(mMaintenanceTurnStats.partsLostToWarehouseOverflow) +
+				" maintenance parts from recycling could not be stored. Free warehouse space.",
+			{{-1, -1}, 0},
+			NotificationArea::NotificationType::Warning});
+	}
+
+	auto recyclingPlants = mStructureManager.getStructures<Recycling>();
+	const auto perPlantWaste = recyclingPlants.empty() ? 0 :
+		mMaintenanceTurnStats.wasteRecycled / static_cast<int>(recyclingPlants.size());
+	const auto perPlantParts = recyclingPlants.empty() ? 0 :
+		mMaintenanceTurnStats.partsProducedFromWaste / static_cast<int>(recyclingPlants.size());
+	for (auto* recyclingPlant : recyclingPlants)
+	{
+		recyclingPlant->recordTurnResults(perPlantWaste, perPlantParts);
+	}
+
+	mMaintenanceTurnStats.warehousePartsOnHand = countMaintenancePartsInWarehouses(mStructureManager);
 }
 
 
@@ -665,7 +660,13 @@ void MapViewState::checkNewlyBuiltStructures()
 
 void MapViewState::updateMaintenance()
 {
-	mMaintenanceTurnStats = {};
+	mMaintenanceTurnStats.required = 0;
+	mMaintenanceTurnStats.repaired = 0;
+	mMaintenanceTurnStats.pending = 0;
+	mMaintenanceTurnStats.personnelAssigned = 0;
+	mMaintenanceTurnStats.personnelCapacity = 0;
+	mMaintenanceTurnStats.suppliesOnHand = 0;
+	mMaintenanceTurnStats.suppliesCapacity = 0;
 
 	for (auto* structure : mStructureManager.allStructures())
 	{
@@ -694,6 +695,8 @@ void MapViewState::updateMaintenance()
 		mMaintenanceTurnStats.suppliesOnHand += maintenanceFacility->materialsLevel();
 		mMaintenanceTurnStats.suppliesCapacity += maintenanceFacility->materialsCapacity();
 	}
+
+	mMaintenanceTurnStats.suppliesOnHand += countMaintenancePartsInWarehouses(mStructureManager);
 
 	for (auto* structure : mStructureManager.allStructures())
 	{
@@ -738,6 +741,13 @@ void MapViewState::updateOverlays()
 		updatePoliceOverlay();
 		setOverlay(mPoliceOverlays[static_cast<std::size_t>(mMapView->currentDepth())], Tile::Overlay::Police);
 	}
+}
+
+
+void MapViewState::updateColonyFoodForecast()
+{
+	const auto researchEffects = computeColonyResearchEffects(mResearchTracker, mTechnologyReader);
+	mColonyFoodForecast = computeColonyFoodForecast(mStructureManager, mPopulationModel, researchEffects);
 }
 
 
@@ -859,23 +869,7 @@ void MapViewState::updateResearch()
 			const auto* technology = mTechnologyReader.findTechnologyFromId(techId);
 			if (!technology) { continue; }
 
-			for (const auto& unlock : technology->unlocks)
-			{
-				if (unlock.unlocks != Technology::Unlock::Unlocks::Structure) { continue; }
-
-				const auto structureIt = StructureIdFromString.find(unlock.value);
-				if (structureIt == StructureIdFromString.end()) { continue; }
-
-				const auto structureId = structureIt->second;
-				if (UndergroundStructures.find(structureId) != UndergroundStructures.end())
-				{
-					mStructureTracker.addUnlockedUndergroundStructure(structureId);
-				}
-				else
-				{
-					mStructureTracker.addUnlockedSurfaceStructure(structureId);
-				}
-			}
+			applyStructureUnlocksFromTechnology(mStructureTracker, *technology);
 		}
 	}
 
@@ -943,9 +937,9 @@ void MapViewState::nextTurn()
 	updateFood();
 	updatePopulation();
 
+	updateBiowasteRecycling();
 	updateMaintenance();
 	updateCommercial();
-	updateBiowasteRecycling();
 
 	if (isMoraleEnabled)
 	{

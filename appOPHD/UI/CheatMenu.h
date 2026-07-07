@@ -4,6 +4,7 @@
 #include <libControls/Button.h>
 #include <libControls/TextField.h>
 #include <libControls/Label.h>
+#include <libControls/TextArea.h>
 
 #include <NAS2D/Signal/Delegate.h>
 
@@ -33,6 +34,8 @@ public:
 
 	CheatMenu(CheatDelegate cheatHandler);
 
+	static CheatCode cheatCodeFromString(const std::string& cheatCode);
+
 protected:
 	void onVisibilityChange(bool visible) override;
 
@@ -45,4 +48,5 @@ private:
 	Label mLabelCheatCode;
 	TextField txtCheatCode;
 	Button btnOkay;
+	TextArea mCheatCodeList;
 };

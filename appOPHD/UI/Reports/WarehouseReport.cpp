@@ -25,8 +25,9 @@ namespace
 	constexpr auto filterButtonSectionOffset = NAS2D::Vector{10, 10};
 	constexpr auto filterButtonSize = NAS2D::Vector{94, 26};
 	constexpr auto infoSectionOffset = filterButtonSectionOffset + NAS2D::Vector{0, filterButtonSize.y + 10};
-	constexpr auto infoSectionHeight = 66;
-	constexpr auto structureListBoxOffset = infoSectionOffset + NAS2D::Vector{0, infoSectionHeight + 10};
+	constexpr auto infoSectionHeight = 78;
+	constexpr auto structureListBoxOffset = infoSectionOffset + NAS2D::Vector{0, infoSectionHeight + 12};
+	constexpr auto rightPanelHeaderHeight = 118;
 
 
 	template <typename Predicate>
@@ -61,7 +62,7 @@ WarehouseReport::WarehouseReport(const StructureManager& structureManager, TakeM
 	fontMedium{getFontMedium()},
 	fontMediumBold{getFontMediumBold()},
 	fontBigBold{getFontHugeBold()},
-	imageWarehouse{getImage("ui/interface/warehouse.png")},
+	imageWarehouse{getImage("structures/warehouse.png")},
 	btnShowAll{"All", {this, &WarehouseReport::onShowAll}},
 	btnFull{"Full", {this, &WarehouseReport::onFull}},
 	btnVacancy{"Vacancy", {this, &WarehouseReport::onVacancy}},
@@ -90,7 +91,7 @@ WarehouseReport::WarehouseReport(const StructureManager& structureManager, TakeM
 
 	add(btnTakeMeThere, {10, 10});
 	add(lstStructures, structureListBoxOffset);
-	add(lstProducts, {NAS2D::Utility<NAS2D::Renderer>::get().center().x + 10, 173});
+	add(lstProducts, {10, 10});
 }
 
 
@@ -233,13 +234,20 @@ void WarehouseReport::onResize()
 {
 	Control::onResize();
 
-	lstStructures.size({(mRect.size.x / 2) - 20, mRect.position.y + mRect.size.y - lstStructures.position().y - 10});
-	lstProducts.area({
-		{NAS2D::Utility<NAS2D::Renderer>::get().center().x + 10, lstProducts.position().y},
-		{(mRect.size.x / 2) - 20, mRect.size.y - 184}
-	});
+	const auto centerX = area().center().x;
+	const auto leftWidth = centerX - area().position.x - 10;
+	const auto rightOriginX = centerX + 10;
+	const auto rightWidth = area().endPoint().x - rightOriginX - 10;
 
-	btnTakeMeThere.position({NAS2D::Utility<NAS2D::Renderer>::get().size().x - 150, position().y + 35});
+	lstStructures.size({leftWidth, area().endPoint().y - lstStructures.position().y - 10});
+
+	const auto productsTop = area().position.y + rightPanelHeaderHeight;
+	const auto productsHeight = area().endPoint().y - productsTop - 10;
+
+	lstProducts.position({rightOriginX, productsTop});
+	lstProducts.size({rightWidth, std::max(productsHeight, 100)});
+
+	btnTakeMeThere.position({area().endPoint().x - btnTakeMeThere.size().x - 10, area().position.y + 12});
 }
 
 
@@ -336,13 +344,20 @@ void WarehouseReport::onStructureSelectionChange()
 
 void WarehouseReport::drawLeftPanel(NAS2D::Renderer& renderer) const
 {
+	const auto panelTop = area().position.y + filterButtonSectionOffset.y;
+	const auto leftPanel = NAS2D::Rectangle<int>{
+		{area().position.x, panelTop},
+		{area().size.x / 2, area().size.y - filterButtonSectionOffset.y}
+	};
+	renderer.drawBoxFilled(leftPanel, NAS2D::Color{25, 25, 25});
+
 	const auto textLineSpacing = infoSectionHeight / 3;
-	const auto textOrigin = position() + infoSectionOffset;
+	const auto textOrigin = area().position + infoSectionOffset;
 	renderer.drawText(fontMediumBold, "Warehouse Count", textOrigin, constants::PrimaryTextColor);
 	renderer.drawText(fontMediumBold, "Total Storage", textOrigin + NAS2D::Vector{0, textLineSpacing}, constants::PrimaryTextColor);
 	renderer.drawText(fontMediumBold, "Capacity Used", textOrigin + NAS2D::Vector{0, textLineSpacing * 2}, constants::PrimaryTextColor);
 
-	const auto valueOrigin = textOrigin + NAS2D::Vector{mRect.size.x / 2 - 20, fontMediumBold.height() - fontMedium.height()};
+	const auto valueOrigin = textOrigin + NAS2D::Vector{leftPanel.size.x / 2 - 20, fontMediumBold.height() - fontMedium.height()};
 	const auto warehouseCountText = std::to_string(warehouseCount);
 	const auto warehouseCapacityText = std::to_string(warehouseCapacityTotal);
 	const auto countTextWidth = fontMedium.width(warehouseCountText);
@@ -366,14 +381,15 @@ void WarehouseReport::drawRightPanel(NAS2D::Renderer& renderer) const
 	const auto* warehouse = selectedWarehouse();
 	if (!warehouse) { return; }
 
-	const auto position = NAS2D::Point{renderer.center().x + 10, this->position().y};
-	renderer.drawText(fontBigBold, warehouse->name(), position + NAS2D::Vector{0, 2}, constants::PrimaryTextColor);
-	renderer.drawImage(imageWarehouse, position + NAS2D::Vector{0, 35});
+	const auto position = NAS2D::Point{area().center().x + 10, area().position.y + 12};
+	renderer.drawText(fontBigBold, warehouse->name(), position, constants::PrimaryTextColor);
 }
 
 
 void WarehouseReport::update()
 {
+	if (!visible()) { return; }
+
 	ControlContainer::update();
 	auto& renderer = NAS2D::Utility<NAS2D::Renderer>::get();
 	draw(renderer);
@@ -382,9 +398,14 @@ void WarehouseReport::update()
 
 void WarehouseReport::draw(NAS2D::Renderer& renderer) const
 {
-	// Left Panel
+	if (!visible()) { return; }
+
 	drawLeftPanel(renderer);
-	const auto position = NAS2D::Point{renderer.center().x, this->position().y};
-	renderer.drawLine(position + NAS2D::Vector{0, 10}, position + NAS2D::Vector{0, mRect.size.y - 10}, constants::PrimaryColor);
+	const auto dividerX = area().center().x;
+	const auto dividerTop = area().position.y + filterButtonSectionOffset.y;
+	renderer.drawLine(
+		NAS2D::Point{dividerX, dividerTop},
+		NAS2D::Point{dividerX, area().endPoint().y - 10},
+		constants::PrimaryColor);
 	drawRightPanel(renderer);
 }

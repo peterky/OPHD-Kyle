@@ -11,6 +11,7 @@
 #include <NAS2D/Renderer/Renderer.h>
 #include <NAS2D/Math/PointInRectangleRange.h>
 
+#include <algorithm>
 #include <map>
 
 
@@ -18,6 +19,8 @@ namespace {
 	const auto TileSize = NAS2D::Vector{128, 55};
 	const auto TileDrawSize = NAS2D::Vector{128, 64};
 	const auto TileDrawOffset = NAS2D::Vector{TileDrawSize.x / 2, TileDrawSize.y - TileSize.y};
+	constexpr int MinViewSize{7};
+	constexpr float MinTileScale{0.5f};
 
 	const std::map<Tile::Overlay, NAS2D::Color> OverlayColors =
 	{
@@ -62,6 +65,45 @@ namespace {
 		uint8_t glowValue = glow();
 		return NAS2D::Color{glowValue, glowValue, glowValue};
 	}
+
+
+	void drawScaledSubImage(NAS2D::Renderer& renderer, const NAS2D::Image& image, NAS2D::Point<float> position, const NAS2D::Rectangle<float>& subImageRect, float scale, NAS2D::Color color)
+	{
+		if (scale == 1.0f)
+		{
+			renderer.drawSubImage(image, position, subImageRect, color);
+			return;
+		}
+
+		const NAS2D::Rectangle<float> destRect{position, subImageRect.size * scale};
+		renderer.drawSubImageStretched(image, destRect, subImageRect, color);
+	}
+}
+
+
+float DetailMap::tileScale() const
+{
+	const auto viewSize = mMapView.viewSize();
+	if (viewSize <= mBaseViewSize) { return 1.0f; }
+	return static_cast<float>(mBaseViewSize) / static_cast<float>(viewSize);
+}
+
+
+NAS2D::Vector<float> DetailMap::scaledTileSize() const
+{
+	return TileSize.to<float>() * tileScale();
+}
+
+
+NAS2D::Vector<float> DetailMap::scaledTileDrawSize() const
+{
+	return TileDrawSize.to<float>() * tileScale();
+}
+
+
+NAS2D::Vector<float> DetailMap::scaledTileDrawOffset() const
+{
+	return TileDrawOffset.to<float>() * tileScale();
 }
 
 
@@ -85,16 +127,67 @@ DetailMap::~DetailMap()
 }
 
 
-void DetailMap::onResize()
+void DetailMap::applyViewSizeFromWindow()
 {
 	const auto size = this->size() - NAS2D::Vector{0, TileDrawOffset.y};
 
-	// Set up map draw position
 	const auto sizeInTiles = size.skewInverseBy(TileSize);
-	mMapView.viewSize(std::min(sizeInTiles.x, sizeInTiles.y));
+	mBaseViewSize = std::min(sizeInTiles.x, sizeInTiles.y);
 
-	// Find top left corner of rectangle containing top tile of diamond
-	mOriginPixelPosition = mRect.position + NAS2D::Vector{size.x / 2, TileDrawOffset.y + (size.y - mMapView.viewSize() * TileSize.y) / 2};
+	const auto maxZoomInOffset = std::max(0, mBaseViewSize - MinViewSize);
+	const auto maxZoomOutOffset = std::max(0, static_cast<int>(static_cast<float>(mBaseViewSize) * (1.0f / MinTileScale - 1.0f)));
+
+	mZoomInOffset = std::clamp(mZoomInOffset, 0, maxZoomInOffset);
+	mZoomOutOffset = std::clamp(mZoomOutOffset, 0, maxZoomOutOffset);
+	mMapView.viewSize(mBaseViewSize + mZoomOutOffset - mZoomInOffset);
+
+	const auto scaledTileSize = this->scaledTileSize();
+	mOriginPixelPosition = mRect.position + NAS2D::Vector{
+		size.x / 2,
+		static_cast<int>(scaledTileDrawOffset().y + (size.y - mMapView.viewSize() * scaledTileSize.y) / 2.0f)
+	};
+}
+
+
+void DetailMap::onResize()
+{
+	applyViewSizeFromWindow();
+}
+
+
+void DetailMap::zoomIn()
+{
+	if (mZoomOutOffset > 0)
+	{
+		--mZoomOutOffset;
+		applyViewSizeFromWindow();
+		return;
+	}
+
+	const auto maxZoomInOffset = std::max(0, mBaseViewSize - MinViewSize);
+	if (mZoomInOffset < maxZoomInOffset)
+	{
+		++mZoomInOffset;
+		applyViewSizeFromWindow();
+	}
+}
+
+
+void DetailMap::zoomOut()
+{
+	if (mZoomInOffset > 0)
+	{
+		--mZoomInOffset;
+		applyViewSizeFromWindow();
+		return;
+	}
+
+	const auto maxZoomOutOffset = std::max(0, static_cast<int>(static_cast<float>(mBaseViewSize) * (1.0f / MinTileScale - 1.0f)));
+	if (mZoomOutOffset < maxZoomOutOffset)
+	{
+		++mZoomOutOffset;
+		applyViewSizeFromWindow();
+	}
 }
 
 
@@ -139,6 +232,10 @@ void DetailMap::update()
 
 void DetailMap::draw(NAS2D::Renderer& renderer) const
 {
+	const auto scale = tileScale();
+	const auto scaledTileSize = this->scaledTileSize();
+	const auto scaledTileDrawSize = this->scaledTileDrawSize();
+	const auto scaledTileDrawOffset = this->scaledTileDrawOffset();
 	int tsetOffset = mMapView.currentDepth() > 0 ? TileDrawSize.y : 0;
 
 	for (const auto tilePosition : NAS2D::PointInRectangleRange{mMapView.viewTileRect()})
@@ -148,25 +245,30 @@ void DetailMap::draw(NAS2D::Renderer& renderer) const
 		if (tile.excavated())
 		{
 			const auto offset = tilePosition - mMapView.viewTileRect().position;
-			const auto position = mOriginPixelPosition - TileDrawOffset + NAS2D::Vector{(offset.x - offset.y) * TileSize.x / 2, (offset.x + offset.y) * TileSize.y / 2};
-			const auto subImageRect = NAS2D::Rectangle{{static_cast<int>(tile.index()) * TileDrawSize.x, tsetOffset}, TileDrawSize};
+			const auto position = mOriginPixelPosition.to<float>() - scaledTileDrawOffset + NAS2D::Vector<float>{
+				(offset.x - offset.y) * scaledTileSize.x / 2.0f,
+				(offset.x + offset.y) * scaledTileSize.y / 2.0f
+			};
+			const auto subImageRect = NAS2D::Rectangle<float>{{static_cast<float>(tile.index()) * TileDrawSize.x, static_cast<float>(tsetOffset)}, TileDrawSize.to<float>()};
 			const bool isTileHighlighted = tilePosition == mMouseTilePosition;
 
-			renderer.drawSubImage(mTileset, position, subImageRect, overlayColor(tile.overlay(), isTileHighlighted));
+			drawScaledSubImage(renderer, mTileset, position, subImageRect, scale, overlayColor(tile.overlay(), isTileHighlighted));
 
 			// Draw a beacon on an unoccupied tile with a mine
 			if (mTileMap.hasOreDeposit(tile.xyz()) && !tile.mapObject())
 			{
-				constexpr NAS2D::Vector<int> beaconOffsetInTile{0, -64};
-				constexpr NAS2D::Vector<int> beaconLightOffsetInTile{59, 15};
-				constexpr NAS2D::Rectangle<int> beaconLightSubImageRect{{59, 79}, {10, 7}};
-				renderer.drawImage(mMineBeacon, position + beaconOffsetInTile);
-				renderer.drawSubImage(mMineBeacon, position + beaconLightOffsetInTile, beaconLightSubImageRect, glowColor());
+				constexpr NAS2D::Vector<float> beaconOffsetInTile{0, -64};
+				constexpr NAS2D::Vector<float> beaconLightOffsetInTile{59, 15};
+				constexpr NAS2D::Rectangle<float> beaconLightSubImageRect{{59, 79}, {10, 7}};
+				const auto beaconOffset = beaconOffsetInTile * scale;
+				const auto beaconLightOffset = beaconLightOffsetInTile * scale;
+				drawScaledSubImage(renderer, mMineBeacon, position + beaconOffset, NAS2D::Rectangle<float>{{0, 0}, TileDrawSize.to<float>()}, scale, NAS2D::Color::Normal);
+				drawScaledSubImage(renderer, mMineBeacon, position + beaconLightOffset, beaconLightSubImageRect, scale, glowColor());
 			}
 
 			if (tile.mapObject())
 			{
-				tile.mapObject()->draw(position);
+				tile.mapObject()->draw(position.to<int>(), scale);
 			}
 		}
 	}
@@ -176,22 +278,27 @@ void DetailMap::draw(NAS2D::Renderer& renderer) const
 void DetailMap::drawGrid(NAS2D::Renderer& renderer) const
 {
 	const auto viewSize = mMapView.viewSize();
-	const auto incrementY = NAS2D::Vector{-TileSize.x, TileSize.y};
-	const auto leftEdge = mOriginPixelPosition + incrementY * viewSize / 2;
-	const auto rightEdge = mOriginPixelPosition + TileSize * viewSize / 2;
+	const auto scaledTileSize = this->scaledTileSize();
+	const auto incrementY = NAS2D::Vector<float>{-scaledTileSize.x, scaledTileSize.y};
+	const auto leftEdge = mOriginPixelPosition.to<float>() + incrementY * viewSize / 2;
+	const auto rightEdge = mOriginPixelPosition.to<float>() + scaledTileSize * viewSize / 2;
 	for (int index = 0; index <= viewSize; ++index)
 	{
-		const auto offsetX = TileSize * index / 2;
+		const auto offsetX = scaledTileSize * index / 2;
 		const auto offsetY = incrementY * index / 2;
-		renderer.drawLine(leftEdge + offsetX, mOriginPixelPosition + offsetX);
-		renderer.drawLine(mOriginPixelPosition + offsetY, rightEdge + offsetY);
+		renderer.drawLine(leftEdge + offsetX, mOriginPixelPosition.to<float>() + offsetX);
+		renderer.drawLine(mOriginPixelPosition.to<float>() + offsetY, rightEdge + offsetY);
 	}
 }
 
 
 void DetailMap::onMouseMove(NAS2D::Point<int> position, NAS2D::Vector<int> /*relative*/)
 {
-	const auto pixelOffset = position - mOriginPixelPosition;
-	const auto tileOffset = NAS2D::Vector{pixelOffset.x * TileSize.y + pixelOffset.y * TileSize.x, pixelOffset.y * TileSize.x - pixelOffset.x * TileSize.y} / (TileSize.x * TileSize.y);
+	const auto scaledTileSize = this->scaledTileSize();
+	const auto pixelOffset = position.to<float>() - mOriginPixelPosition.to<float>();
+	const auto tileOffset = NAS2D::Vector{
+		static_cast<int>((pixelOffset.x * scaledTileSize.y + pixelOffset.y * scaledTileSize.x) / (scaledTileSize.x * scaledTileSize.y)),
+		static_cast<int>((pixelOffset.y * scaledTileSize.x - pixelOffset.x * scaledTileSize.y) / (scaledTileSize.x * scaledTileSize.y))
+	};
 	mMouseTilePosition = mMapView.viewTileRect().position + tileOffset;
 }

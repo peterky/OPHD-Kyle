@@ -17,10 +17,12 @@
 
 #include <libOPHD/Technology/ColonyResearchEffects.h>
 
-#include <libOPHD/Technology/ColonyResearchEffects.h>
+#include <NAS2D/EventHandler.h>
+
 #include "../StructureManager.h"
 #include "../Map/TileMap.h"
 #include "../Map/MapView.h"
+#include "../Map/OreHaulRoutes.h"
 #include "../MapObjects/Robots.h"
 #include "../MapObjects/Structures/CommandCenter.h"
 #include "../MapObjects/Structures/FoodProduction.h"
@@ -46,6 +48,42 @@ namespace
 {
 	constexpr int MainButtonSize{30};
 	constexpr int BottomUiHeight{162};
+
+
+	void drawLeftColonyHudBackdrop(NAS2D::Renderer& renderer, const MaintenanceTurnSummary& maintenanceSummary, const RobotDeploymentSummary& robotSummary)
+	{
+		const auto& maintenanceArea = maintenanceSummary.area();
+		const auto& robotArea = robotSummary.area();
+		if (maintenanceArea.size.y <= 0 || robotArea.size.y <= 0) { return; }
+
+		constexpr int backdropPad = 6;
+		const auto backdrop = NAS2D::Rectangle<int>{
+			{maintenanceArea.position.x - backdropPad, maintenanceArea.position.y - backdropPad},
+			{maintenanceArea.size.x + backdropPad * 2, robotArea.endPoint().y - maintenanceArea.position.y + backdropPad * 2}
+		};
+
+		renderer.drawBoxFilled(backdrop, NAS2D::Color{10, 10, 10, 235});
+		renderer.drawBox(backdrop, NAS2D::Color{72, 72, 72});
+
+		const auto maintenanceHeader = NAS2D::Rectangle<int>{
+			{backdrop.position.x + 2, backdrop.position.y + 2},
+			{backdrop.size.x - 4, 22}
+		};
+		renderer.drawBoxFilled(maintenanceHeader, NAS2D::Color{22, 22, 22, 240});
+
+		const auto unitsHeader = NAS2D::Rectangle<int>{
+			{backdrop.position.x + 2, robotArea.position.y - 2},
+			{backdrop.size.x - 4, 22}
+		};
+		renderer.drawBoxFilled(unitsHeader, NAS2D::Color{22, 22, 22, 240});
+
+		const auto dividerY = robotArea.position.y - 1;
+		renderer.drawLine(
+			NAS2D::Point{backdrop.position.x + 8, dividerY}.to<float>(),
+			NAS2D::Point{backdrop.endPoint().x - 8, dividerY}.to<float>(),
+			NAS2D::Color{52, 52, 52}
+		);
+	}
 }
 
 
@@ -74,6 +112,8 @@ void MapViewState::initUi()
 	mFileIoDialog.anchored(true);
 	mFileIoDialog.hide();
 
+	mSkipTurnsDialog.anchored(true);
+
 	mResourceBreakdownPanel.position({0, 22});
 	mResourceBreakdownPanel.playerResources(&mResourcesCount);
 
@@ -82,6 +122,7 @@ void MapViewState::initUi()
 	mGameOptionsDialog.hide();
 	mKeyBindingsDialog.hide();
 	mKeyBindingsDialog.hide();
+	mSkipTurnsDialog.hide();
 
 	mAnnouncement.hide();
 	mMineOperationsWindow.hide();
@@ -138,6 +179,15 @@ void MapViewState::initUi()
 	mToolTip.add(mBtnTogglePoliceOverlay, constants::ToolTipBtnPolice);
 	mToolTip.add(mTooltipCurrentTurns, constants::ToolTipCurrentTurns);
 	mToolTip.add(mTooltipSystemButton, constants::ToolTipSystemMenu);
+	mToolTip.add(mTooltipMaintenanceDone, constants::ToolTipMaintenanceDone);
+	mToolTip.add(mTooltipMaintenanceCrew, constants::ToolTipMaintenanceCrew);
+	mToolTip.add(mTooltipMaintenanceParts, constants::ToolTipMaintenanceParts);
+	mToolTip.add(mTooltipRobotCommand, constants::ToolTipRobotCommand);
+	mToolTip.add(mTooltipRobotDigger, constants::ToolTipRobotDigger);
+	mToolTip.add(mTooltipRobotDozer, constants::ToolTipRobotDozer);
+	mToolTip.add(mTooltipRobotMiner, constants::ToolTipRobotMiner);
+	mToolTip.add(mTooltipRobotExplorer, constants::ToolTipRobotExplorer);
+	mToolTip.add(mTooltipRobotTrucks, constants::ToolTipRobotTrucks);
 }
 
 
@@ -155,7 +205,7 @@ void MapViewState::setupUiPositions(NAS2D::Vector<int> size)
 	mTooltipSystemButton.position({size.x - (constants::ResourceIconSize + constants::MarginTight * 2), 0});
 	mTooltipCurrentTurns.position({size.x - 80 , 0});
 
-	mRobotDeploymentSummary.area({{8, mBottomUiRect.position.y - 8 - 100}, {200, 100}});
+	updateLeftSummaryLayout();
 
 	// Mini Map
 	mMiniMap->area({{size.x - 300 - constants::Margin, mBottomUiRect.position.y + constants::Margin}, {300, 150}});
@@ -200,6 +250,7 @@ void MapViewState::setupUiPositions(NAS2D::Vector<int> size)
 	mGameOptionsDialog.position(centerPosition(mGameOptionsDialog) - NAS2D::Vector{0, 100});
 	mKeyBindingsDialog.position(centerPosition(mKeyBindingsDialog) - NAS2D::Vector{0, 100});
 	mKeyBindingsDialog.position(centerPosition(mKeyBindingsDialog) - NAS2D::Vector{0, 100});
+	mSkipTurnsDialog.position(centerPosition(mSkipTurnsDialog) - NAS2D::Vector{0, 100});
 
 	mDiggerDirection.position(NAS2D::Point{centerPosition(mDiggerDirection).x, size.y / 2 - 125});
 
@@ -331,6 +382,7 @@ bool MapViewState::modalUiElementDisplayed() const
 	return mGameOptionsDialog.visible() ||
 		mKeyBindingsDialog.visible() ||
 		mFileIoDialog.visible() ||
+		mSkipTurnsDialog.visible() ||
 		mGameOverDialog.visible();
 }
 
@@ -349,11 +401,12 @@ void MapViewState::drawUI()
 
 	mMiniMap->draw(renderer);
 	mNavControl->draw(renderer);
-	mRobotDeploymentSummary.draw(renderer);
 
 	if (mResourceInfoBar.isPopulationPanelVisible()) { mPopulationPanel.update(); }
 	if (mResourceInfoBar.isResourcePanelVisible()) { mResourceBreakdownPanel.update(); }
 
+	updateColonyFoodForecast();
+	mResourceInfoBar.refreshTooltips();
 	mResourceInfoBar.update();
 	drawSystemButton();
 	drawResearchStatus();
@@ -371,14 +424,30 @@ void MapViewState::drawUI()
 	// Menus
 	mMapObjectPicker.update();
 
+	drawLeftColonyHudBackdrop(renderer, mMaintenanceTurnSummary, mRobotDeploymentSummary);
+	mMaintenanceTurnSummary.draw(renderer);
+	mRobotDeploymentSummary.draw(renderer);
+
 	// Windows
 	mFileIoDialog.update();
+	mSkipTurnsDialog.update();
+	if (mSkipTurnsDialog.visible())
+	{
+		mSkipTurnsDialog.refreshWarning(
+			mFood,
+			mColonyFoodForecast.productionPerTurn,
+			mColonyFoodForecast.consumptionPerTurn);
+	}
 	mGameOptionsDialog.update();
 	mKeyBindingsDialog.update();
 	mKeyBindingsDialog.update();
 	mWindowStack.update();
 
-	if (!modalUiElementDisplayed()) { mToolTip.update(); }
+	if (!modalUiElementDisplayed())
+	{
+		mToolTip.update();
+		drawMapHoverTooltip();
+	}
 }
 
 
@@ -432,6 +501,7 @@ void MapViewState::onToggleConnectedness()
 		mBtnToggleCommRangeOverlay.toggle(false);
 		mBtnTogglePoliceOverlay.toggle(false);
 
+		if (mConnectednessDirty) { updateConnectedness(); }
 		setOverlay(mConnectednessOverlay, Tile::Overlay::Connectedness);
 	}
 }
@@ -447,6 +517,7 @@ void MapViewState::onToggleCommRangeOverlay()
 		mBtnToggleConnectedness.toggle(false);
 		mBtnTogglePoliceOverlay.toggle(false);
 
+		updateCommRangeOverlay();
 		setOverlay(mCommRangeOverlay, Tile::Overlay::Communications);
 	}
 }
@@ -461,6 +532,7 @@ void MapViewState::onTogglePoliceOverlay()
 		mBtnToggleConnectedness.toggle(false);
 		mBtnToggleCommRangeOverlay.toggle(false);
 
+		updatePoliceOverlay();
 		setOverlay(mPoliceOverlays[static_cast<std::size_t>(mMapView->currentDepth())], Tile::Overlay::Police);
 	}
 }
@@ -475,6 +547,12 @@ void MapViewState::onToggleRouteOverlay()
 		mBtnToggleCommRangeOverlay.toggle(false);
 		mBtnTogglePoliceOverlay.toggle(false);
 
+		if (mRoutesDirty)
+		{
+			mOreHaulRoutes->updateRoutes();
+			mRoutesDirty = false;
+		}
+		updateRouteOverlay();
 		setOverlay(mTruckRouteOverlay, Tile::Overlay::TruckingRoutes);
 	}
 }
@@ -556,6 +634,13 @@ void MapViewState::onGameOver()
 }
 
 
+void MapViewState::onQuitGame()
+{
+	mGameOptionsDialog.hide();
+	NAS2D::postQuitEvent();
+}
+
+
 void MapViewState::onTakeMeThere(const MapCoordinate& position)
 {
 	mMapView->centerOn(position);
@@ -626,6 +711,7 @@ void MapViewState::onCheatCodeEntry(CheatMenu::CheatCode cheatCode)
 			mRobotPool.addRobot(RobotTypeIndex::Digger);
 			mRobotPool.addRobot(RobotTypeIndex::Dozer);
 			mRobotPool.addRobot(RobotTypeIndex::Miner);
+			mRobotPool.addRobot(RobotTypeIndex::Explorer);
 		break;
 
 	}

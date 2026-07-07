@@ -297,19 +297,21 @@ void ResearchTechTree::buildLayout(
 
 	for (const auto externalTechId : externalPrerequisiteIds)
 	{
-		const auto& technology = catalog.technologyFromId(externalTechId);
+		const auto* technology = catalog.findTechnologyFromId(externalTechId);
+		if (!technology) { continue; }
+
 		layoutNodes.push_back(LayoutNode{
-			technology.id,
-			technology.name,
-			categoryNameForTech(catalog, technology.id),
+			technology->id,
+			technology->name,
+			categoryNameForTech(catalog, technology->id),
 			0,
 			0,
 			true,
-			tracker.isBeingResearched(technology.id) ? tracker.researchProgress(technology.id).progress : 0,
-			technology.cost,
-			technology.iconIndex,
-			technology.labType,
-			technology.requiredTechnologies
+			tracker.isBeingResearched(technology->id) ? tracker.researchProgress(technology->id).progress : 0,
+			technology->cost,
+			technology->iconIndex,
+			technology->labType,
+			technology->requiredTechnologies
 		});
 	}
 

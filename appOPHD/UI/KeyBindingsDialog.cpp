@@ -8,6 +8,7 @@
 #include <NAS2D/Utility.h>
 
 #include <array>
+#include <cstdlib>
 
 
 namespace
@@ -15,26 +16,41 @@ namespace
 	constexpr auto buttonSize = NAS2D::Vector{120, 24};
 	constexpr auto rowHeight = 28;
 	constexpr auto labelWidth = 180;
+	constexpr auto intervalFieldWidth = 60;
+
+
+	int parseIntervalTurns(const std::string& text)
+	{
+		if (text.empty()) { return GameSettings::DefaultAutosaveIntervalTurns; }
+		return std::atoi(text.c_str());
+	}
 }
 
 
 KeyBindingsDialog::KeyBindingsDialog(GameSettings& settings, BackHandler backHandler) :
-	Window{"Key Bindings"},
+	Window{constants::OptionsGameSettings},
 	mSettings{settings},
 	mBackHandler{backHandler},
-	lblInstructions{"Select a binding, then press a key. Defaults: G = Digger, Z = Dozer, M = Miner, Space = Place."},
+	lblInstructions{"Select a binding, then press a key. Esc opens the game menu. Defaults: G/Z/M/Space."},
 	lblDigger{constants::Robodigger + ":"},
 	lblDozer{constants::Robodozer + ":"},
 	lblMiner{constants::Robominer + ":"},
-	lblPlaceRobot{"Place at cursor:"},
+	lblPlaceRobot{"Place selection:"},
 	btnDiggerKey{"?", {this, &KeyBindingsDialog::onBindDigger}},
 	btnDozerKey{"?", {this, &KeyBindingsDialog::onBindDozer}},
 	btnMinerKey{"?", {this, &KeyBindingsDialog::onBindMiner}},
 	btnPlaceRobotKey{"?", {this, &KeyBindingsDialog::onBindPlaceRobot}},
 	btnResetDefaults{"Reset Defaults", {this, &KeyBindingsDialog::onResetDefaults}},
+	lblAutoSaveSection{"Auto-Save"},
+	chkAutoSave{"Enable auto-save", {this, &KeyBindingsDialog::onAutoSaveToggle}},
+	lblAutoSaveInterval{"Every N turns:"},
+	txtAutoSaveInterval{4, {this, &KeyBindingsDialog::onAutoSaveIntervalChanged}},
 	btnBack{"Back", backHandler}
 {
 	position({0, 0});
+
+	txtAutoSaveInterval.numbersOnly(true);
+	txtAutoSaveInterval.border(TextField::BorderVisibility::Always);
 
 	const auto left = mRect.position.x + 10;
 	auto rowY = mRect.position.y + sWindowTitleBarHeight + 8;
@@ -56,6 +72,15 @@ KeyBindingsDialog::KeyBindingsDialog(GameSettings& settings, BackHandler backHan
 	addBindingRow(lblMiner, btnMinerKey, rowY);
 	rowY += rowHeight;
 	addBindingRow(lblPlaceRobot, btnPlaceRobotKey, rowY);
+	rowY += rowHeight + 8;
+
+	add(lblAutoSaveSection, {left, rowY});
+	rowY += rowHeight;
+	add(chkAutoSave, {left, rowY});
+	rowY += rowHeight;
+	add(lblAutoSaveInterval, {left, rowY + 4});
+	txtAutoSaveInterval.size({intervalFieldWidth, buttonSize.y});
+	add(txtAutoSaveInterval, {left + labelWidth, rowY});
 	rowY += rowHeight + 8;
 
 	btnResetDefaults.size({buttonSize.x, buttonSize.y});
@@ -84,6 +109,7 @@ KeyBindingsDialog::~KeyBindingsDialog()
 void KeyBindingsDialog::refreshLabels()
 {
 	updateButtonText();
+	syncAutoSaveControls();
 }
 
 
@@ -93,6 +119,29 @@ void KeyBindingsDialog::updateButtonText()
 	btnDozerKey.text(keyCodeDisplayName(mSettings.robotSelectKey(RobotTypeIndex::Dozer)));
 	btnMinerKey.text(keyCodeDisplayName(mSettings.robotSelectKey(RobotTypeIndex::Miner)));
 	btnPlaceRobotKey.text(keyCodeDisplayName(mSettings.placeRobotKey()));
+}
+
+
+void KeyBindingsDialog::syncAutoSaveControls()
+{
+	chkAutoSave.checked(mSettings.autosaveEnabled());
+	txtAutoSaveInterval.text(std::to_string(mSettings.autosaveIntervalTurns()));
+	txtAutoSaveInterval.enabled(mSettings.autosaveEnabled());
+	lblAutoSaveInterval.enabled(mSettings.autosaveEnabled());
+}
+
+
+void KeyBindingsDialog::onAutoSaveToggle()
+{
+	mSettings.setAutosaveEnabled(chkAutoSave.checked());
+	syncAutoSaveControls();
+}
+
+
+void KeyBindingsDialog::onAutoSaveIntervalChanged(TextField& field)
+{
+	mSettings.setAutosaveIntervalTurns(parseIntervalTurns(field.text()));
+	syncAutoSaveControls();
 }
 
 
@@ -110,7 +159,7 @@ void KeyBindingsDialog::assignKey(NAS2D::KeyCode key)
 	if (key == NAS2D::KeyCode::Escape)
 	{
 		mBindingTarget = BindingTarget::None;
-		lblInstructions.text("Select a binding, then press a key. Defaults: G = Digger, Z = Dozer, M = Miner, Space = Place.");
+		lblInstructions.text("Select a binding, then press a key. Esc opens the game menu. Defaults: G/Z/M/Space.");
 		return;
 	}
 
@@ -159,7 +208,7 @@ void KeyBindingsDialog::assignKey(NAS2D::KeyCode key)
 	}
 
 	mBindingTarget = BindingTarget::None;
-	lblInstructions.text("Select a binding, then press a key. Defaults: G = Digger, Z = Dozer, M = Miner, Space = Place.");
+	lblInstructions.text("Select a binding, then press a key. Defaults: G = Digger, Z = Dozer, M = Miner, Space = Place selection.");
 	updateButtonText();
 }
 
@@ -191,7 +240,22 @@ void KeyBindingsDialog::onBindPlaceRobot()
 void KeyBindingsDialog::onResetDefaults()
 {
 	mSettings.resetToDefaults();
-	updateButtonText();
+	refreshLabels();
+}
+
+
+bool KeyBindingsDialog::handleEscapeKey()
+{
+	if (!visible()) { return false; }
+
+	if (mBindingTarget != BindingTarget::None)
+	{
+		assignKey(NAS2D::KeyCode::Escape);
+		return true;
+	}
+
+	mBackHandler();
+	return true;
 }
 
 
@@ -201,11 +265,11 @@ void KeyBindingsDialog::onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier /*mod*/
 
 	if (mBindingTarget != BindingTarget::None)
 	{
-		assignKey(key);
+		// Escape is handled centrally by MapViewState::handleEscapeKey().
+		if (key != NAS2D::KeyCode::Escape) { assignKey(key); }
 		return;
 	}
 
-	if (key == NAS2D::KeyCode::Escape) { mBackHandler(); }
 }
 
 
@@ -221,5 +285,9 @@ void KeyBindingsDialog::onEnableChange()
 	btnMinerKey.enabled(enabled());
 	btnPlaceRobotKey.enabled(enabled());
 	btnResetDefaults.enabled(enabled());
+	lblAutoSaveSection.enabled(enabled());
+	chkAutoSave.enabled(enabled());
+	lblAutoSaveInterval.enabled(enabled() && mSettings.autosaveEnabled());
+	txtAutoSaveInterval.enabled(enabled() && mSettings.autosaveEnabled());
 	btnBack.enabled(enabled());
 }

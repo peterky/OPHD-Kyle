@@ -1,22 +1,36 @@
 #include "TruckAvailability.h"
 
 #include "StructureManager.h"
+#include "MapObjects/Structures/MineFacility.h"
 #include "MapObjects/Structures/Warehouse.h"
+
+#include <libOPHD/EnumProductType.h>
 
 #include <NAS2D/Utility.h>
 
 
 int getTruckAvailability()
 {
-	int trucksAvailable = 0;
+	return getTruckDeploymentStats(NAS2D::Utility<StructureManager>::get()).available;
+}
 
-	const auto& warehouseList = NAS2D::Utility<StructureManager>::get().getStructures<Warehouse>();
-	for (auto* warehouse : warehouseList)
+
+TruckDeploymentStats getTruckDeploymentStats(const StructureManager& structureManager)
+{
+	TruckDeploymentStats stats;
+
+	for (auto* warehouse : structureManager.getStructures<Warehouse>())
 	{
-		trucksAvailable += warehouse->products().count(ProductType::PRODUCT_TRUCK);
+		stats.available += warehouse->products().count(ProductType::PRODUCT_TRUCK);
 	}
 
-	return trucksAvailable;
+	for (auto* mineFacility : structureManager.getStructures<MineFacility>())
+	{
+		stats.deployed += mineFacility->assignedTrucks();
+	}
+
+	stats.total = stats.available + stats.deployed;
+	return stats;
 }
 
 

@@ -103,6 +103,7 @@ void StructureListBox::clear()
 
 void StructureListBox::add(Structure* structure, std::string stateDescription)
 {
+	if (!structure) { return; }
 	mItems.emplace_back(StructureListBoxItem{structure->name(), structure, std::move(stateDescription)});
 	updateScrollLayout();
 }
@@ -125,6 +126,12 @@ NAS2D::Color StructureListBox::itemBorderColor(std::size_t index) const
 void StructureListBox::drawItem(NAS2D::Renderer& renderer, NAS2D::Rectangle<int> drawArea, std::size_t index) const
 {
 	const auto& item = getItem(index);
+	if (!item.structure || item.structure->destroyed())
+	{
+		renderer.drawText(mFont, item.text, drawArea.position + NAS2D::Vector{5, 4}, NAS2D::Color{150, 150, 150});
+		return;
+	}
+
 	const auto structureState = item.structure->state();
 	const auto& structureTextColor = structureTextColorFromIndex(structureState);
 

@@ -3,7 +3,11 @@
 #include "Route.h"
 #include "Tile.h"
 #include "../StructureManager.h"
+#include "../MapObjects/Structure.h"
 #include "../MapObjects/Structures/MineFacility.h"
+#include "../MapObjects/Structures/Warehouse.h"
+
+#include <libOPHD/StorableResources.h>
 
 #include <map>
 #include <algorithm>
@@ -21,6 +25,18 @@ namespace
 	 */
 	constexpr int ShortestPathTraversalCount{1000};
 	constexpr int LoadUnloadTime{36};
+	constexpr int WarehouseToSmelterTransferPerTurn{75};
+
+	StorableResources& rawOrePool(Structure& structure)
+	{
+		return structure.isSmelter() ? structure.production() : structure.storage();
+	}
+
+	bool structureIsOreBuffer(const Structure& structure)
+	{
+		return structure.isSmelter() ||
+			(structure.isWarehouse() && structure.rawOreStorageCapacity() > 0);
+	}
 
 	std::map<const MineFacility*, Route> routeTable;
 }
@@ -59,7 +75,14 @@ int OreHaulRoutes::getOreHaulCapacity(const MineFacility& mineFacility) const
 {
 	if (!hasRoute(mineFacility)) { return 0; }
 	const auto routeCost = LoadUnloadTime + getRouteCost(mineFacility);
-	return ShortestPathTraversalCount * mineFacility.assignedTrucks() / routeCost;
+	const auto baseCapacity = ShortestPathTraversalCount * mineFacility.assignedTrucks() / routeCost;
+
+	if (const auto* researchEffects = Structure::activeResearchEffects())
+	{
+		return researchEffects->adjustedOreHaulCapacity(baseCapacity);
+	}
+
+	return baseCapacity;
 }
 
 
@@ -82,10 +105,20 @@ void OreHaulRoutes::updateRoutes()
 	const auto structureIsSmelter = [](const Structure& structure) { return structure.isSmelter(); };
 	const auto structureIsOperableMine = [](const Structure& structure) { return structure.isMineFacility() && structure.isOperable(); };
 	const auto& smelters = mStructureManager.getStructures(structureIsSmelter);
+	std::vector<Structure*> oreDestinations;
+	oreDestinations.insert(oreDestinations.end(), smelters.begin(), smelters.end());
+	for (auto* warehouse : mStructureManager.getStructures<Warehouse>())
+	{
+		if (warehouse->operational() && warehouse->rawOreStorageCapacity() > 0)
+		{
+			oreDestinations.push_back(warehouse);
+		}
+	}
+
 	const auto& mines = mStructureManager.getStructures(structureIsOperableMine);
 	for (const auto* mineFacility : mines)
 	{
-		auto newRoute = mRouteFinder.findLowestCostRoute(mineFacility, smelters);
+		auto newRoute = mRouteFinder.findLowestCostRoute(mineFacility, oreDestinations);
 		if (!newRoute.isEmpty()) {
 			routeTable[dynamic_cast<const MineFacility*>(mineFacility)] = newRoute;
 		}
@@ -101,24 +134,60 @@ void OreHaulRoutes::transportOreFromMines()
 		if (routeIt != routeTable.end())
 		{
 			const auto& route = routeIt->second;
-			auto& smelter = *route.path.back()->structure();
+			auto& destination = *route.path.back()->structure();
 			auto& mineFacility = dynamic_cast<MineFacility&>(*route.path.front()->structure());
 
-			if (!smelter.operational()) { break; }
+			if (!destination.operational() || !structureIsOreBuffer(destination)) { continue; }
 
 			const int oreHaulCapacity = getOreHaulCapacity(mineFacility);
 			const auto movementCap = StorableResources{oreHaulCapacity, oreHaulCapacity, oreHaulCapacity, oreHaulCapacity};
 
 			auto& mineStorage = mineFacility.storage();
-			auto& smelterStored = smelter.production();
+			auto& destinationStored = rawOrePool(destination);
 
-			const auto oreAvailable = smelterStored + mineStorage.cap(movementCap);
-			const auto newSmelterStored = oreAvailable.cap(smelter.rawOreStorageCapacity());
-			const auto movedOre = newSmelterStored - smelterStored;
+			const auto oreAvailable = destinationStored + mineStorage.cap(movementCap);
+			const auto newDestinationStored = oreAvailable.cap(destination.rawOreStorageCapacity());
+			const auto movedOre = newDestinationStored - destinationStored;
 
 			mineStorage -= movedOre;
-			smelterStored = newSmelterStored;
+			destinationStored = newDestinationStored;
 		}
+	}
+}
+
+
+void OreHaulRoutes::transportOreFromWarehouses()
+{
+	const auto structureIsSmelter = [](const Structure& structure) { return structure.isSmelter(); };
+	const auto& smelters = mStructureManager.getStructures(structureIsSmelter);
+	if (smelters.empty()) { return; }
+
+	for (auto* warehouse : mStructureManager.getStructures<Warehouse>())
+	{
+		if (!warehouse->operational() || warehouse->rawOreStorageCapacity() <= 0) { continue; }
+		if (warehouse->storage().isEmpty()) { continue; }
+
+		const auto route = mRouteFinder.findLowestCostRoute(warehouse, smelters);
+		if (route.isEmpty()) { continue; }
+
+		auto& smelter = *route.path.back()->structure();
+		if (!smelter.operational()) { continue; }
+
+		const auto movementCap = StorableResources{
+			WarehouseToSmelterTransferPerTurn,
+			WarehouseToSmelterTransferPerTurn,
+			WarehouseToSmelterTransferPerTurn,
+			WarehouseToSmelterTransferPerTurn};
+
+		auto& warehouseStorage = warehouse->storage();
+		auto& smelterStored = smelter.production();
+
+		const auto oreAvailable = smelterStored + warehouseStorage.cap(movementCap);
+		const auto newSmelterStored = oreAvailable.cap(smelter.rawOreStorageCapacity());
+		const auto movedOre = newSmelterStored - smelterStored;
+
+		warehouseStorage -= movedOre;
+		smelterStored = newSmelterStored;
 	}
 }
 

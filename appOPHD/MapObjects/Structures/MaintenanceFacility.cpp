@@ -1,11 +1,15 @@
 #include "MaintenanceFacility.h"
 
+#include "../../ColonyWarehouseLogistics.h"
 #include "../../States/MapViewStateHelper.h"
+#include "../../StructureManager.h"
 
 #include <libOPHD/EnumIntegrityLevel.h>
 #include <libOPHD/EnumStructureID.h>
 #include <libOPHD/EnumDisabledReason.h>
 #include <libOPHD/StorableResources.h>
+
+#include <NAS2D/Utility.h>
 
 #include <algorithm>
 
@@ -98,6 +102,18 @@ bool MaintenanceFacility::hasPriorityStructures() const
 }
 
 
+void MaintenanceFacility::beginMaintenanceTurn()
+{
+	mRepairsThisTurn = 0;
+
+	while (mMaterialsLevel < MaintenanceSuppliesCapacity)
+	{
+		if (pullMaintenancePartFromWarehouses() <= 0) { break; }
+		++mMaterialsLevel;
+	}
+}
+
+
 void MaintenanceFacility::repairStructures(StructureList& structures)
 {
 	if (!operational()) { return; }
@@ -107,11 +123,16 @@ void MaintenanceFacility::repairStructures(StructureList& structures)
 		repairPriorityStructures(structures);
 	}
 
-	for (auto* structure : structures)
+	if (structures.empty()) { return; }
+
+	const auto structureCount = structures.size();
+	for (std::size_t i = 0; i < structureCount; ++i)
 	{
-		repairStructure(structure);
-		std::rotate(structures.begin(), structures.begin() + 1, structures.end());
+		if (!canMakeRepairs()) { break; }
+		repairStructure(structures[(mRoundRobinIndex + i) % structureCount]);
 	}
+
+	mRoundRobinIndex = (mRoundRobinIndex + 1) % structureCount;
 }
 
 
@@ -156,10 +177,16 @@ void MaintenanceFacility::repairStructure(Structure* structure)
 
 	if (!canMakeRepairs()) { return; }
 
+	if (structure->isOperable() && structure->integrity() >= 100)
+	{
+		return;
+	}
+
 	if (structure->disabled() && structure->disabledReason() == DisabledReason::StructuralIntegrity)
 	{
 		--mMaterialsLevel;
 		++mAssignedPersonnel;
+		++mRepairsThisTurn;
 		if (structure->integrityLevel() >= IntegrityLevel::Worn)
 		{
 			structure->integrity(100);
@@ -171,30 +198,26 @@ void MaintenanceFacility::repairStructure(Structure* structure)
 			addPriorityStructure(structure);
 		}
 	}
-	else if (structure->isOperable())
+	else if (structure->isOperable() && structure->integrity() < 100)
 	{
 		--mMaterialsLevel;
 		++mAssignedPersonnel;
+		++mRepairsThisTurn;
 		structure->integrity(100);
-
-		if (structure->isRoad())
-		{
-			structure->rebuild();
-		}
 	}
 }
 
 
 void MaintenanceFacility::think()
 {
-	if (mMaterialsLevel == MaintenanceSuppliesCapacity) { return; }
-
-	StorableResources maintenanceSuppliesCost{1, 1, 1, 1};
-
-	if (resources() >= maintenanceSuppliesCost)
+	if (mMaterialsLevel < MaintenanceSuppliesCapacity)
 	{
-		removeRefinedResources(maintenanceSuppliesCost);
-		mMaterialsLevel = std::clamp(mMaterialsLevel + 1, 0, MaintenanceSuppliesCapacity);
+		StorableResources maintenanceSuppliesCost{1, 1, 1, 1};
+		if (resources() >= maintenanceSuppliesCost)
+		{
+			removeRefinedResources(maintenanceSuppliesCost);
+			mMaterialsLevel = std::clamp(mMaterialsLevel + 1, 0, MaintenanceSuppliesCapacity);
+		}
 	}
 
 	mAssignedPersonnel = 0;

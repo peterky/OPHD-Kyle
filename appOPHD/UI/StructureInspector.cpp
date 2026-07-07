@@ -5,14 +5,14 @@
 #include "../MapObjects/Structure.h"
 #include "../MapObjects/Structures/FoodProduction.h"
 #include "../MapObjects/Structures/OreRefining.h"
+#include "../MapObjects/Structures/Recycling.h"
+#include "../MapObjects/Structures/Warehouse.h"
 #include "../MapObjects/Structures/ResearchFacility.h"
 #include "../MapObjects/Structures/Residence.h"
 #include "../Resources.h"
+#include "../StructureStatusDescription.h"
 #include "StringTable.h"
 #include "TextRender.h"
-
-#include <libOPHD/EnumDisabledReason.h>
-#include <libOPHD/EnumIdleReason.h>
 #include <libOPHD/EnumStructureID.h>
 
 #include <algorithm>
@@ -24,47 +24,9 @@ namespace
 	constexpr auto windowSizeMin = NAS2D::Vector{390, 250};
 
 
-	const std::map<DisabledReason, std::string> disabledReasonTable =
-	{
-		{DisabledReason::None, "Not Disabled"},
-
-		{DisabledReason::Chap, "CHAP Facility unavailable"},
-		{DisabledReason::Disconnected, "Not connected to a Command Center"},
-		{DisabledReason::Energy, "Insufficient Energy"},
-		{DisabledReason::Population, "Insufficient Population"},
-		{DisabledReason::RefinedResources, "Insufficient refined resources"},
-		{DisabledReason::StructuralIntegrity, "Structural Integrity is compromised"}
-	};
-
-	const std::map<IdleReason, std::string> idleReadonTable =
-	{
-		{IdleReason::None, "Not Idle"},
-
-		{IdleReason::PlayerSet, "Manually set to Idle"},
-		{IdleReason::InternalStorageFull, "Internal storage pool full"},
-		{IdleReason::FactoryProductionComplete, "Production complete, awaiting shipment"},
-		{IdleReason::FactoryInsufficientResources, "Insufficient resources"},
-		{IdleReason::FactoryInsufficientRobotCommandCapacity, "Lack of robot command capacity"},
-		{IdleReason::FactoryInsufficientWarehouseSpace, "Lack of Warehouse space"},
-		{IdleReason::MineExhausted, "Mine exhausted"},
-		{IdleReason::MineInactive, "Mine inactive"},
-		{IdleReason::InsufficientLuxuryProduct, "Insufficient Luxury Product"}
-	};
-
-
-	std::string getDisabledReason(const Structure& structure)
-	{
-		return (structure.disabled()) ?
-			disabledReasonTable.at(structure.disabledReason()) :
-			(structure.isIdle()) ?
-				idleReadonTable.at(structure.idleReason()) :
-				"";
-	}
-
-
 	std::string formatAge(const Structure& structure)
 	{
-		return structure.ages() ? std::to_string(structure.age()) + " of " + std::to_string(structure.maxAge()) : "N/A";
+		return std::to_string(structure.age());
 	}
 
 
@@ -78,7 +40,7 @@ namespace
 		stringTable[{0, 1}].text = "State:";
 		stringTable[{1, 1}].text = structure.stateDescription(structure.state());
 
-		stringTable[{1, 2}].text = getDisabledReason(structure);
+		stringTable[{1, 2}].text = structureStatusReason(structure);
 
 		if (structure.underConstruction())
 		{
@@ -235,15 +197,45 @@ namespace
 	}
 
 
-	StringTable recyclingStringTable(const Structure& structure)
+	StringTable recyclingStringTable(const Recycling& recycling)
 	{
-		StringTable stringTable(2, 1);
+		StringTable stringTable(2, 4);
 
-		stringTable[{0, 0}].text = "Max Waste Processing Capacity:";
-		stringTable[{1, 0}].text = std::to_string(structure.bioWasteProcessingCapacity());
+		stringTable[{0, 0}].text = "Waste Processing Capacity:";
+		stringTable[{1, 0}].text = std::to_string(recycling.bioWasteProcessingCapacity());
 
-		if (!structure.operational()) {
+		stringTable[{0, 1}].text = "Waste Recycled (last turn):";
+		stringTable[{1, 1}].text = std::to_string(recycling.wasteProcessedLastTurn());
+
+		stringTable[{0, 2}].text = "Parts Produced (last turn):";
+		stringTable[{1, 2}].text = std::to_string(recycling.partsGeneratedLastTurn());
+
+		stringTable[{0, 3}].text = "Output:";
+		stringTable[{1, 3}].text = "1 maintenance part per 20 waste → warehouses";
+
+		if (!recycling.operational()) {
 			stringTable[{1, 0}].textColor = constants::WarningTextColor;
+		}
+
+		return stringTable;
+	}
+
+
+	StringTable warehouseStringTable(const Warehouse& warehouse)
+	{
+		StringTable stringTable(2, 6);
+
+		stringTable[{0, 0}].text = "Factory Product Storage:";
+		stringTable[{1, 0}].text = std::to_string(warehouse.products().availableStorage()) + " / " + std::to_string(warehouse.products().capacity());
+
+		if (warehouse.rawOreStorageCapacity() > 0)
+		{
+			const auto& rawOre = warehouse.storage();
+			const auto rawCapacity = warehouse.rawOreStorageCapacity() * static_cast<int>(rawOre.resources.size());
+			stringTable[{0, 1}].text = "Raw Ore Buffer:";
+			stringTable[{1, 1}].text = std::to_string(rawOre.total()) + " / " + std::to_string(rawCapacity);
+			stringTable[{0, 2}].text = "Ore Routing:";
+			stringTable[{1, 2}].text = "Mines may haul here; ore auto-feeds smelters";
 		}
 
 		return stringTable;
@@ -324,7 +316,8 @@ namespace
 		if (structureId == StructureID::CommTower) { return commTowerStringTable(structure); }
 		if (const auto* foodProduction = dynamic_cast<const FoodProduction*>(&structure)) { return foodProductionStringTable(*foodProduction); }
 		if (const auto* oreRefining = dynamic_cast<const OreRefining*>(&structure)) { return oreRefiningStringTable(*oreRefining); }
-		if (structureId == StructureID::Recycling) { return recyclingStringTable(structure); }
+		if (const auto* recycling = dynamic_cast<const Recycling*>(&structure)) { return recyclingStringTable(*recycling); }
+		if (const auto* warehouse = dynamic_cast<const Warehouse*>(&structure)) { return warehouseStringTable(*warehouse); }
 		if (const auto* researchFacility = dynamic_cast<const ResearchFacility*>(&structure)) { return researchFacilityStringTable(*researchFacility); }
 		if (structureId == StructureID::Residence) { return residenceStringTable(dynamic_cast<const Residence&>(structure)); }
 		if (structureId == StructureID::StorageTanks) { return storageTanksStringTable(structure); }

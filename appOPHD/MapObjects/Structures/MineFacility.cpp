@@ -7,6 +7,7 @@
 #include <libOPHD/StorableResources.h>
 #include <libOPHD/MapObjects/OreDeposit.h>
 #include <libOPHD/MapObjects/StructureType.h>
+#include <libOPHD/Technology/ColonyResearchEffects.h>
 
 #include <algorithm>
 #include <stdexcept>
@@ -16,6 +17,17 @@ namespace
 {
 	constexpr int BaseMineProductionRate{10};
 	constexpr int BaseMineExtensionTime{10};
+
+
+	int effectiveMineProductionRate()
+	{
+		if (const auto* researchEffects = Structure::activeResearchEffects())
+		{
+			return researchEffects->adjustedMineProductionRate(BaseMineProductionRate);
+		}
+
+		return BaseMineProductionRate;
+	}
 }
 
 
@@ -52,7 +64,7 @@ StorableResources MineFacility::maxCapacity() const
 StorableResources MineFacility::maxTransferAmounts() const
 {
 	const auto availableCapacity = maxCapacity() - storage();
-	auto maxTransfer = availableCapacity.cap(BaseMineProductionRate);
+	auto maxTransfer = availableCapacity.cap(effectiveMineProductionRate());
 	return maxTransfer;
 }
 

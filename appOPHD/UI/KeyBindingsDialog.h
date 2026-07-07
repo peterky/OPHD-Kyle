@@ -2,7 +2,9 @@
 
 #include <libControls/Window.h>
 #include <libControls/Button.h>
+#include <libControls/CheckBox.h>
 #include <libControls/Label.h>
+#include <libControls/TextField.h>
 
 #include <cstdint>
 
@@ -27,6 +29,9 @@ public:
 
 	void refreshLabels();
 
+	/** Handles Esc while this dialog is open (binding cancel or back to game menu). */
+	bool handleEscapeKey();
+
 protected:
 	void onKeyDown(NAS2D::KeyCode key, NAS2D::KeyModifier mod, bool repeat);
 	void onEnableChange() override;
@@ -46,9 +51,12 @@ private:
 	void onBindMiner();
 	void onBindPlaceRobot();
 	void onResetDefaults();
+	void onAutoSaveToggle();
+	void onAutoSaveIntervalChanged(TextField& field);
 	void beginBinding(BindingTarget target);
 	void assignKey(NAS2D::KeyCode key);
 	void updateButtonText();
+	void syncAutoSaveControls();
 
 private:
 	GameSettings& mSettings;
@@ -67,5 +75,11 @@ private:
 	Button btnMinerKey;
 	Button btnPlaceRobotKey;
 	Button btnResetDefaults;
+
+	Label lblAutoSaveSection;
+	CheckBox chkAutoSave;
+	Label lblAutoSaveInterval;
+	TextField txtAutoSaveInterval;
+
 	Button btnBack;
 };

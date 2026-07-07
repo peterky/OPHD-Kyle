@@ -23,6 +23,7 @@ public:
 		ClickHandler saveClickHandler,
 		ClickHandler loadClickHandler,
 		ClickHandler exitClickHandler,
+		ClickHandler quitGameClickHandler,
 		ClickHandler continueClickHandler
 	);
 	~GameOptionsDialog() override;
@@ -40,5 +41,6 @@ private:
 	Button btnLoad;
 	Button btnHelp;
 	Button btnExit;
+	Button btnQuitGame;
 	Button btnContinue;
 };

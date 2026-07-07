@@ -1,4 +1,5 @@
 #include "ResearchReport.h"
+#include "ResearchWiki.h"
 
 #include "../../Constants/Strings.h"
 #include "../../Constants/UiConstants.h"
@@ -96,24 +97,6 @@ namespace
 		return "Unknown";
 	}
 
-	std::string unlockDescription(const Technology::Unlock& unlock)
-	{
-		switch (unlock.unlocks)
-		{
-		case Technology::Unlock::Unlocks::Structure:
-			return "Structure: " + unlock.value;
-		case Technology::Unlock::Unlocks::Robot:
-			return "Robot: " + unlock.value;
-		case Technology::Unlock::Unlocks::Vehicle:
-			return "Vehicle: " + unlock.value;
-		case Technology::Unlock::Unlocks::Satellite:
-			return "Satellite: " + unlock.value;
-		case Technology::Unlock::Unlocks::DisasterPrediction:
-			return "Disaster prediction: " + unlock.value;
-		}
-
-		return unlock.value;
-	}
 }
 
 
@@ -129,6 +112,7 @@ ResearchReport::ResearchReport(const StructureManager& structureManager, TakeMeT
 	imageTopicIcons{getImage("topicicons.png")},
 	mTechTree{getFontMedium(), imageTopicIcons, {this, &ResearchReport::handleTopicChanged}},
 	btnStartResearch{constants::ResearchReportStartResearch, ResearchControlButtonSize, {this, &ResearchReport::onStartResearch}},
+	btnTechIndex{"Tech Index", ResearchControlButtonSize, {this, &ResearchReport::onShowTechIndex}},
 	lblResearchProgress{},
 	txtTopicDescription{getFontMedium(), constants::PrimaryTextColor}
 {
@@ -139,6 +123,7 @@ ResearchReport::ResearchReport(const StructureManager& structureManager, TakeMeT
 	add(mTechTree, {});
 
 	add(btnStartResearch, {});
+	add(btnTechIndex, {});
 	add(lblResearchProgress, {});
 	btnStartResearch.enabled(false);
 
@@ -199,11 +184,21 @@ void ResearchReport::refresh()
 
 	mTechTree.area(mResearchTopicArea);
 
-	const auto researchControlsY = area().endPoint().y - ResearchControlButtonSize.y - SectionPadding.y;
-	btnStartResearch.position({mTopicDetailsHeaderArea.startPoint().x, researchControlsY});
-	lblResearchProgress.position({btnStartResearch.area().endPoint().x + SectionPadding.x, researchControlsY + 4});
+	const auto controlBlockTop = area().endPoint().y - (ResearchControlButtonSize.y + fontMedium.height() + SectionPadding.y * 4);
+	lblResearchProgress.position({mTopicDetailsHeaderArea.startPoint().x, controlBlockTop});
+	const auto buttonRowY = controlBlockTop + fontMedium.height() + SectionPadding.y;
+	btnTechIndex.position({mTopicDetailsHeaderArea.startPoint().x, buttonRowY});
+	btnStartResearch.position({btnTechIndex.area().endPoint().x + SectionPadding.x, buttonRowY});
 
 	txtTopicDescription.text("");
+	mTopicDetailsArea =
+	{
+		mTopicDetailsArea.position,
+		{
+			mTopicDetailsArea.size.x,
+			std::max(80, controlBlockTop - mTopicDetailsArea.position.y - SectionPadding.y)
+		}
+	};
 	txtTopicDescription.area(mTopicDetailsArea);
 
 	updateResearchControls();
@@ -313,13 +308,14 @@ void ResearchReport::setSectionRects()
 
 	mResearchTreeWidth = ((area().size.x / 3) * 2) - (MarginSize * 4) - CategoryIconSize.x;
 
-	const auto detailsColumnX = SectionPadding.x * 2 + area().position.x + MarginSize * 3 + CategoryIconSize.x + mResearchTreeWidth;
-	const auto detailsColumnWidth = area().size.x - mResearchTopicArea.endPoint().x - SectionPadding.x * 3;
+	const auto contentLeft = area().position.x + MarginSize * 3 + CategoryIconSize.x;
+	const auto detailsColumnX = contentLeft + mResearchTreeWidth + SectionPadding.x * 2;
+	const auto detailsColumnWidth = area().endPoint().x - detailsColumnX - SectionPadding.x;
 	const auto labRowHeight = fontBigBold.height() + SectionPadding.y + LabTypeIconSize.y + SectionPadding.y;
 
 	mTopicDetailsHeaderArea =
 	{
-		area().position + NAS2D::Vector<int>{detailsColumnX, SectionPadding.y},
+		{detailsColumnX, area().position.y + SectionPadding.y},
 		{detailsColumnWidth, labRowHeight}
 	};
 
@@ -329,7 +325,7 @@ void ResearchReport::setSectionRects()
 		mTopicDetailsHeaderArea.crossYPoint().y + SectionPadding.y
 	};
 
-	const auto researchControlsTop = area().endPoint().y - ResearchControlButtonSize.y - SectionPadding.y * 2;
+	const auto researchControlsTop = area().endPoint().y - ResearchControlButtonSize.y - SectionPadding.y * 4;
 	const NAS2D::Point<int> topicDetailStart{
 		mTopicDetailsIconPosition + NAS2D::Vector<int>{0, TopicIconSize.y + SectionPadding.y}};
 	mTopicDetailsArea =
@@ -413,8 +409,21 @@ void ResearchReport::resetResearchDetails()
 }
 
 
+void ResearchReport::onShowTechIndex()
+{
+	if (!mTechCatalog || !mResearchTracker) { return; }
+
+	mShowingTechIndex = true;
+	btnTechIndex.toggle(true);
+	txtTopicDescription.text(buildTechIndexText(*mTechCatalog, *mResearchTracker));
+	updateResearchControls();
+}
+
+
 void ResearchReport::handleTopicChanged()
 {
+	mShowingTechIndex = false;
+	btnTechIndex.toggle(false);
 	txtTopicDescription.text("");
 
 	if (!mTechTree.isItemSelected())
@@ -503,13 +512,36 @@ std::string ResearchReport::buildTopicDetailsText(const Technology& technology) 
 		}
 	}
 
+	if (!technology.modifiers.empty())
+	{
+		details << "\nBenefits:\n";
+		for (const auto& modifier : technology.modifiers)
+		{
+			details << "  - " << modifierBenefitDescription(modifier) << "\n";
+		}
+	}
+
 	if (!technology.unlocks.empty())
 	{
 		details << "\nUnlocks:\n";
 		for (const auto& unlock : technology.unlocks)
 		{
-			details << "  - " << unlockDescription(unlock) << "\n";
+			details << "  - " << unlockBenefitDescription(unlock) << "\n";
 		}
+	}
+
+	const auto downstream = downstreamTechnologies(*mTechCatalog, technology.id);
+	if (!downstream.empty())
+	{
+		details << "\nEnables research:\n";
+		for (const auto& entry : downstream)
+		{
+			details << "  - " << entry << "\n";
+		}
+	}
+	else if (technology.modifiers.empty() && technology.unlocks.empty())
+	{
+		details << "\nNote: No direct colony bonus. Completing this unlocks later topics in the tree.\n";
 	}
 
 	const auto readyTopics = readyTechnologiesInCategory();
@@ -630,13 +662,15 @@ void ResearchReport::layoutContentAreas()
 		statusY += lineHeight;
 	}
 
+	const auto controlReserve = ResearchControlButtonSize.y + fontMedium.height() + SectionPadding.y * 5;
 	const auto treeTop = statusY + SectionPadding.y;
+	const auto treeBottom = area().endPoint().y - controlReserve;
 	mResearchTopicArea =
 	{
 		{contentLeft, treeTop},
 		{
 			mResearchTreeWidth,
-			area().size.y - treeTop + area().position.y - MarginSize * 2
+			std::max(120, treeBottom - treeTop)
 		}
 	};
 }
@@ -743,6 +777,7 @@ void ResearchReport::drawCategories(NAS2D::Renderer& renderer) const
 
 void ResearchReport::drawCategoryHeader(NAS2D::Renderer& renderer) const
 {
+	if (!mSelectedCategory) { return; }
 	renderer.drawText(fontBigBold, mSelectedCategory->name, mCategoryHeaderTextPosition, constants::PrimaryTextColor);
 }
 
@@ -858,11 +893,13 @@ void ResearchReport::drawTopicDetailsPanel(NAS2D::Renderer& renderer) const
 
 void ResearchReport::draw(NAS2D::Renderer& renderer) const
 {
+	if (mCategoryPanels.empty()) { return; }
+
 	drawCategories(renderer);
 	drawVerticalSectionSpacer(renderer, mCategoryPanels.front().rect.endPoint().x + SectionPadding.x);
 	drawCategoryHeader(renderer);
 	drawResearchStatusStrip(renderer);
-	drawVerticalSectionSpacer(renderer, (area().size.x / 3) * 2);
+	drawVerticalSectionSpacer(renderer, mResearchTopicArea.endPoint().x + SectionPadding.x);
 	drawTopicHeaderPanel(renderer);
 	drawTopicDetailsPanel(renderer);
 }

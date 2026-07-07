@@ -15,6 +15,8 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
 #endif
 
 
@@ -140,6 +142,88 @@ namespace
 	}
 
 
+	std::string captureStackTrace(const CONTEXT* context)
+	{
+		if (!context) { return {}; }
+
+		std::ostringstream stackTrace;
+		stackTrace << "Stack trace:\n";
+
+		const auto process = GetCurrentProcess();
+		SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+		if (!SymInitialize(process, nullptr, TRUE)) { return {}; }
+
+		STACKFRAME64 frame{};
+		frame.AddrPC.Mode = AddrModeFlat;
+		frame.AddrFrame.Mode = AddrModeFlat;
+		frame.AddrStack.Mode = AddrModeFlat;
+
+#ifdef _M_X64
+		frame.AddrPC.Offset = context->Rip;
+		frame.AddrFrame.Offset = context->Rbp;
+		frame.AddrStack.Offset = context->Rsp;
+#elif defined(_M_IX86)
+		frame.AddrPC.Offset = context->Eip;
+		frame.AddrFrame.Offset = context->Ebp;
+		frame.AddrStack.Offset = context->Esp;
+#else
+		return {};
+#endif
+
+		DWORD machineType = IMAGE_FILE_MACHINE_AMD64;
+#ifdef _M_IX86
+		machineType = IMAGE_FILE_MACHINE_I386;
+#endif
+
+		for (int frameIndex = 0; frameIndex < 24; ++frameIndex)
+		{
+			if (!StackWalk64(
+				machineType,
+				process,
+				GetCurrentThread(),
+				&frame,
+				const_cast<CONTEXT*>(context),
+				nullptr,
+				SymFunctionTableAccess64,
+				SymGetModuleBase64,
+				nullptr))
+			{
+				break;
+			}
+
+			if (frame.AddrPC.Offset == 0) { break; }
+
+			DWORD64 displacement = 0;
+			alignas(SYMBOL_INFO) char symbolBuffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME]{};
+			auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+			symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+			symbol->MaxNameLen = MAX_SYM_NAME;
+
+			std::string symbolName = "unknown";
+			if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol))
+			{
+				symbolName = symbol->Name;
+			}
+
+			IMAGEHLP_LINE64 line{};
+			line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+			DWORD lineDisplacement = 0;
+			if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &lineDisplacement, &line) && line.FileName)
+			{
+				stackTrace << "  #" << frameIndex << " 0x" << std::hex << frame.AddrPC.Offset << std::dec
+					<< " " << symbolName << " (" << line.FileName << ":" << line.LineNumber << ")\n";
+			}
+			else
+			{
+				stackTrace << "  #" << frameIndex << " 0x" << std::hex << frame.AddrPC.Offset << std::dec
+					<< " " << symbolName << "\n";
+			}
+		}
+
+		return stackTrace.str();
+	}
+
+
 	LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS* exceptionInfo)
 	{
 		std::ostringstream details;
@@ -154,6 +238,12 @@ namespace
 				const auto operation = record->ExceptionInformation[0] == 0 ? "read" :
 					record->ExceptionInformation[0] == 1 ? "write" : "execute";
 				details << "Access: " << operation << " at 0x" << std::hex << record->ExceptionInformation[1] << std::dec << "\n";
+			}
+
+			const auto stackTrace = captureStackTrace(exceptionInfo->ContextRecord);
+			if (!stackTrace.empty())
+			{
+				details << stackTrace;
 			}
 		}
 

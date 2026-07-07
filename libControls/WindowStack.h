@@ -22,6 +22,9 @@ public:
 
 	void hide();
 
+	/** Hides the topmost visible window. Returns true if a window was dismissed. */
+	bool dismissTopmost();
+
 	void update();
 
 private:

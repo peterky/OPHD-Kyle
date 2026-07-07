@@ -1,9 +1,30 @@
 #include "GameSettings.h"
 
+#include <NAS2D/Configuration.h>
 #include <NAS2D/EnumKeyCode.h>
+#include <NAS2D/Utility.h>
 
+#include <algorithm>
 #include <cctype>
 #include <string>
+
+
+namespace
+{
+	constexpr auto ConfigSection = "game";
+
+	NAS2D::KeyCode keyFromConfig(const NAS2D::Dictionary& dict, const std::string& key, NAS2D::KeyCode defaultKey)
+	{
+		if (!dict.has(key)) { return defaultKey; }
+		return static_cast<NAS2D::KeyCode>(dict.get<int>(key));
+	}
+
+
+	void setKeyInConfig(NAS2D::Dictionary& dict, const std::string& key, NAS2D::KeyCode keyCode)
+	{
+		dict.set(key, static_cast<int>(keyCode));
+	}
+}
 
 
 NAS2D::KeyCode GameSettings::robotSelectKey(RobotTypeIndex robotType) const
@@ -44,6 +65,12 @@ void GameSettings::setRobotSelectKey(RobotTypeIndex robotType, NAS2D::KeyCode ke
 void GameSettings::setPlaceRobotKey(NAS2D::KeyCode key)
 {
 	mPlaceRobotKey = key;
+}
+
+
+void GameSettings::setAutosaveIntervalTurns(int turns)
+{
+	mAutosaveIntervalTurns = std::clamp(turns, MinAutosaveIntervalTurns, MaxAutosaveIntervalTurns);
 }
 
 
@@ -89,7 +116,14 @@ bool GameSettings::conflictsWithReservedKey(NAS2D::KeyCode key) const
 	case NAS2D::KeyCode::F1:
 	case NAS2D::KeyCode::F2:
 	case NAS2D::KeyCode::F3:
+	case NAS2D::KeyCode::F4:
+	case NAS2D::KeyCode::F5:
+	case NAS2D::KeyCode::F6:
+	case NAS2D::KeyCode::F7:
+	case NAS2D::KeyCode::F8:
+	case NAS2D::KeyCode::F9:
 	case NAS2D::KeyCode::F10:
+	case NAS2D::KeyCode::R:
 	case NAS2D::KeyCode::Num0:
 	case NAS2D::KeyCode::Num1:
 	case NAS2D::KeyCode::Num2:
@@ -117,12 +151,45 @@ bool GameSettings::isKeyInUse(NAS2D::KeyCode key, RobotTypeIndex ignoreRobot) co
 }
 
 
+void GameSettings::loadFromConfig()
+{
+	auto& config = NAS2D::Utility<NAS2D::Configuration>::get();
+	const auto& game = config[ConfigSection];
+
+	mDiggerKey = keyFromConfig(game, "key-digger", NAS2D::KeyCode::G);
+	mDozerKey = keyFromConfig(game, "key-dozer", NAS2D::KeyCode::Z);
+	mMinerKey = keyFromConfig(game, "key-miner", NAS2D::KeyCode::M);
+	mPlaceRobotKey = keyFromConfig(game, "key-place-robot", NAS2D::KeyCode::Space);
+
+	mAutosaveEnabled = game.get("autosave-enabled", false);
+	mAutosaveIntervalTurns = game.get("autosave-interval-turns", DefaultAutosaveIntervalTurns);
+	setAutosaveIntervalTurns(mAutosaveIntervalTurns);
+}
+
+
+void GameSettings::saveToConfig() const
+{
+	auto& config = NAS2D::Utility<NAS2D::Configuration>::get();
+	auto& game = config[ConfigSection];
+
+	setKeyInConfig(game, "key-digger", mDiggerKey);
+	setKeyInConfig(game, "key-dozer", mDozerKey);
+	setKeyInConfig(game, "key-miner", mMinerKey);
+	setKeyInConfig(game, "key-place-robot", mPlaceRobotKey);
+
+	game.set("autosave-enabled", mAutosaveEnabled);
+	game.set("autosave-interval-turns", mAutosaveIntervalTurns);
+}
+
+
 void GameSettings::resetToDefaults()
 {
 	mDiggerKey = NAS2D::KeyCode::G;
 	mDozerKey = NAS2D::KeyCode::Z;
 	mMinerKey = NAS2D::KeyCode::M;
 	mPlaceRobotKey = NAS2D::KeyCode::Space;
+	mAutosaveEnabled = false;
+	mAutosaveIntervalTurns = DefaultAutosaveIntervalTurns;
 }
 
 

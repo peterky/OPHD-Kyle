@@ -52,6 +52,7 @@ public:
 	void productType(ProductType type);
 
 	ProductType productWaiting() const { return mProductWaiting; }
+	void productWaiting(ProductType type) { mProductWaiting = type; }
 	ProductType pullProduct();
 
 	const ProductionTypeList& productList() const { return mAvailableProducts; }

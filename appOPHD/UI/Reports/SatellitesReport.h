@@ -11,7 +11,11 @@ namespace NAS2D
 	class Image;
 }
 
+class ColonyOrbitalProgram;
 class StructureManager;
+class TileMap;
+class TechnologyCatalog;
+class ResearchTracker;
 
 
 class SatellitesReport : public Report
@@ -30,15 +34,26 @@ public:
 
 	void update() override;
 
+	void injectOrbitalProgram(
+		ColonyOrbitalProgram& program,
+		TileMap& tileMap,
+		TechnologyCatalog& catalog,
+		ResearchTracker& tracker);
+
 private:
 	void onResize() override;
-
 	void draw(NAS2D::Renderer& renderer) const override;
 
 	TakeMeThereDelegate mTakeMeThereHandler;
+
+	ColonyOrbitalProgram* mOrbitalProgram{nullptr};
+	TileMap* mTileMap{nullptr};
+	TechnologyCatalog* mTechnologyCatalog{nullptr};
+	ResearchTracker* mResearchTracker{nullptr};
+
 	const NAS2D::Font& fontMedium;
 	const NAS2D::Font& fontMediumBold;
 	const NAS2D::Font& fontBigBold;
 
-	const NAS2D::Image& imageNotImplemented;
+	const NAS2D::Image& imageSatellite;
 };

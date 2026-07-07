@@ -58,7 +58,7 @@ private:
 	int mMaxDepth = 0; /**< Maximum digging depth. */
 	int mDigTurnsRemaining = 0; /**< Turns remaining before extension is complete. */
 	int mAssignedTrucks = 1; /**< All mine facilities are built with at least one truck. */
-	int mMaxTruckCount = 10;
+	int mMaxTruckCount = 100;
 
 	OreDeposit* mOreDeposit = nullptr; /**< OreDeposit that this facility manages. */
 

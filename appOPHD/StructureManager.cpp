@@ -285,13 +285,18 @@ StructureList StructureManager::commandCenters() const
 StructureList StructureManager::activeCommandCenters() const
 {
 	StructureList structures;
+	structures.reserve(mDeployedStructures.size());
+
 	for (auto* structure : mDeployedStructures)
 	{
-		if (structure->isCommand() && structure->operational())
+		if (!structure || structure->destroyed() || !structure->isCommand() || !structure->operational())
 		{
-			structures.push_back(structure);
+			continue;
 		}
+
+		structures.push_back(structure);
 	}
+
 	return structures;
 }
 
@@ -339,11 +344,16 @@ CommandCenter& StructureManager::firstCc() const
 
 std::vector<MapCoordinate> StructureManager::operationalCommandCenterPositions() const
 {
+	const auto commandCenters = activeCommandCenters();
 	std::vector<MapCoordinate> positions;
-	for (const auto* commandCenter : activeCommandCenters())
+	positions.reserve(commandCenters.size());
+
+	for (const auto* commandCenter : commandCenters)
 	{
+		if (!commandCenter || commandCenter->destroyed()) { continue; }
 		positions.push_back(commandCenter->xyz());
 	}
+
 	return positions;
 }
 
@@ -638,9 +648,10 @@ void StructureManager::update(const StorableResources& resources, PopulationPool
 {
 	mColonyResearchEffects = researchEffects;
 	Structure::setActiveResearchEffects(&mColonyResearchEffects);
-	updateStructures(resources, population, mDeployedStructures);
 
+	// Assign colonists before structure think() so residence biowaste generation uses current population.
 	assignColonistsToResidences(population);
+	updateStructures(resources, population, mDeployedStructures);
 
 	/**
 	 * Scientists are assigned to labs after other facilities like medical, university, etc
