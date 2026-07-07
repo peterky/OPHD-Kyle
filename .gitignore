@@ -3,6 +3,8 @@
 
 # Local build outputs and release packages (stored under release/ on Synology)
 dist/
+release/*
+!release/README.md
 .build/
 _Debug Pics/
 steam-artwork/
